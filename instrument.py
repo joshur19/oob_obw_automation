@@ -32,6 +32,7 @@ class BaseInstrument:
         if self.connect():
             id = self.instrument.query('*IDN?')
             tags.log('Instrument', f"Succesfully connected to instrument {id}")
+            self.instrument.write('*RST')
             self.disconnect()
         else:
             tags.log('Instrument', 'Unable to connect to instrument.')

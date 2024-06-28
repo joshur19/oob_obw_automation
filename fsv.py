@@ -18,6 +18,8 @@ class FSV(instrument.BaseInstrument):
 
     def __init__(self, visa_address):
         super().__init__(visa_address)
+        if self.connect():
+            self.instrument.write('SYST:DISP:UPD ON')
 
     ### GENERAL PARAMETERS
     # set center frequency within limits specified by manual (up to 30 GHz)
@@ -27,6 +29,13 @@ class FSV(instrument.BaseInstrument):
                 self.instrument.write(f'SENS:FREQ:CENT {freq}')
                 self.disconnect()
                 tags.log('FSV', f'Center frequency set to {self.format_freq(freq)}')
+        else:
+            tags.log('FSV', 'Invalid frequency, not in range of FSV.')
+
+    def set_center_freq_connected(self, freq):
+        if (freq > 0 and freq < 30000000000):
+            self.instrument.write(f'SENS:FREQ:CENT {freq}')
+            tags.log('FSV', f'Center frequency set to {self.format_freq(freq)}')
         else:
             tags.log('FSV', 'Invalid frequency, not in range of FSV.')
 
@@ -40,13 +49,27 @@ class FSV(instrument.BaseInstrument):
         else:
             tags.log('FSV', 'Invalid frequency, not in range of FSV.')
 
+    def set_span_connected(self, freq):
+        if (freq > 0 and freq < 30000000000):
+            self.instrument.write(f'SENS:FREQ:SPAN {freq}')
+            tags.log('FSV', f'Span set to {self.format_freq(freq)}')
+        else:
+            tags.log('FSV', 'Invalid frequency, not in range of FSV.')
+
     # adjust offset to reflect reference max e.r.p. as measured in SAC
-    def adjust_erp(self, ref_value):
+    def adjust_erp(self, ref_value, centre_frequency, ocw, rbw):
         offset = 0
 
         ref_value = float(ref_value)
 
         if self.connect():
+            self.set_center_freq_connected(centre_frequency)
+            sleep(0.5)
+            self.set_span_connected(6*ocw)
+            sleep(0.5)
+            self.set_rbw_connected(rbw)
+            sleep(0.5)
+
             self.instrument.write('CALC:MARK1:STAT ON')
             self.instrument.write('DISP:TRAC:MODE MAXH')
             sleep(3)
@@ -78,12 +101,20 @@ class FSV(instrument.BaseInstrument):
             self.disconnect()
             tags.log('FSV', f'RBW set to {self.format_freq(rbw)}.')
 
+    def set_rbw_connected(self, rbw):
+        self.instrument.write(f'SENS:BAND:RES {rbw}')
+        tags.log('FSV', f'RBW set to {self.format_freq(rbw)}.')
+
     # set FSV video bandwidth
     def set_vbw_ratio(self, ratio):
         if self.connect():
             self.instrument.write(f'SENS:BAND:VID:RAT {ratio}')
             self.disconnect()
             tags.log('FSV', f'VBW set to {ratio}x RBW.')
+
+    def set_vbw_ratio_connected(self, ratio):
+        self.instrument.write(f'SENS:BAND:VID:RAT {ratio}')
+        tags.log('FSV', f'VBW set to {ratio}x RBW.')
 
     # set trace mode of specific trace
     def set_trace_mode(self, trace_nr, trace_mode):
@@ -92,11 +123,19 @@ class FSV(instrument.BaseInstrument):
             raise ValueError(f'Invalid value for trace_mode. Expected one of {valid_modes}, got {trace_mode}')
 
         ### TODO: also check if trace number is valid
-
         if self.connect():
             self.instrument.write(f'DISP:TRAC{trace_nr}:MODE {trace_mode}')
             self.disconnect()
             tags.log('FSV', f'TRACE {trace_nr} set to mode {trace_mode}.')
+
+    def set_trace_mode_connected(self, trace_nr, trace_mode):
+        valid_modes = ['write', 'view', 'average', 'maxhold', 'minhold', 'blank']
+        if trace_mode not in valid_modes:
+            raise ValueError(f'Invalid value for trace_mode. Expected one of {valid_modes}, got {trace_mode}')
+
+        ### TODO: also check if trace number is valid
+        self.instrument.write(f'DISP:TRAC{trace_nr}:MODE {trace_mode}')
+        tags.log('FSV', f'TRACE {trace_nr} set to mode {trace_mode}.')
 
     # set detector mode to specific values
     def set_det_mode(self, det_mode):
@@ -108,6 +147,14 @@ class FSV(instrument.BaseInstrument):
             self.instrument.write(f'SENS:WIND:DET {det_mode}')
             self.disconnect()
             tags.log('FSV', f'Detector mode set to {det_mode}.')
+
+    def set_det_mode_connected(self, det_mode):
+        valid_modes = ['apeak', 'negative', 'positive', 'sample', 'rms', 'average', 'qpeak']
+        if det_mode not in valid_modes:
+            raise ValueError(f'Invalid value for det_mode. Expected one of {valid_modes}, got {det_mode}')
+        
+        self.instrument.write(f'SENS:WIND:DET {det_mode}')
+        tags.log('FSV', f'Detector mode set to {det_mode}.')
 
     # show marker table true/false
     def show_mtable(self, visible):
@@ -166,21 +213,53 @@ class FSV(instrument.BaseInstrument):
 
     ### AUTOMATED TEST PROCEDURES
     # measure occupied bandwidth with FSV built-in functions
-    def measure_obw(self):
+    def measure_obw(self, filename, path, center_frequency, obw_parameters):
         if self.connect():
+            # prepare parameters
+            self.set_center_freq_connected(center_frequency)
+            sleep(0.5)
+            self.set_span_connected(obw_parameters['span'])
+            sleep(0.5)
+            self.set_rbw_connected(obw_parameters['rbw'])
+            sleep(0.5)
+            self.set_vbw_ratio_connected(obw_parameters['vbw_ratio'])
+            sleep(0.5)
+            self.set_trace_mode_connected(1, 'maxhold')
+            sleep(1)
+            self.set_trace_mode_connected(2, 'write')
+            sleep(1)
+            self.set_det_mode_connected(obw_parameters['det_mode'])      # BUG: for some reason trace 2 isn't affected by the detector mode change
+            sleep(0.5)
+
+            # perform automated measurement
             self.instrument.write('CALC:MARK:FUNC:POW:SEL OBW')
-            sleep(2)
+            sleep(4)
             obw = self.instrument.query('CALC:MARK:FUNC:POW:RES? OBW')
             tags.log('FSV', f'OBW measurement executed: {self.format_freq(str.strip(obw))}')
+            self.take_screenshot_connected(filename, path)
+            sleep(5)
             self.disconnect()
             return obw
         else:
             return None
         
+    # setup instrument for OOB measurement
+    def prep_oob_parameters(self, oob_parameters):
+        if self.connect():
+            # prepare parameters
+            self.set_rbw_connected(oob_parameters['rbw'])
+            sleep(0.5)
+            self.set_trace_mode_connected(1, 'maxhold')
+            sleep(0.5)
+            self.set_trace_mode_connected(2, 'write')
+            sleep(0.5)
+            self.set_det_mode_connected(oob_parameters['det_mode'])
+
+            self.disconnect()
+        
     # measure out-of-band emissions for operating channel
     def measure_oob_oc(self, limit_points, filename, path):
         if self.connect():
-
             # clear lines and then define a new limit line
             self.instrument.write('CALC:LIM1:DEL')
             self.instrument.write('CALC:MARK:AOFF')

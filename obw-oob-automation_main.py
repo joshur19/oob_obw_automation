@@ -9,6 +9,7 @@ import fsv
 import sps
 import csv
 import tags
+import EN_300_220_1
 import datetime
 from time import sleep
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton)
@@ -23,6 +24,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.sps = sps.SPS(tags.sps_addr)
         self.fsv.initialize()
         self.sps.initialize()
+        self.standard = EN_300_220_1.EN_300_220_1()
 
         self.initUI()
     
@@ -190,6 +192,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.checkbox_oob = QCheckBox('Execute Out-Of-Band Emissions Measurement')
         self.checkbox_temp = QCheckBox('Include extreme temperature testing')
         self.checkbox_volt = QCheckBox('Include extreme voltage testing')
+        self.checkbox_dm2 = QCheckBox('EUT generates test signal of type D-M2')
         
         # Start measurement button
         self.start_button = QPushButton('Start Automated Measurement')
@@ -322,6 +325,7 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         if self.validate_inputs():
             
+            ## Preparation and extraction of relevant input from GUI
             self.status_bar.showMessage('Measurement started...')
             QApplication.processEvents()
             
@@ -333,105 +337,89 @@ class OutOfBandMeasurementAutomation(QWidget):
             # Extract project number
             project_nr = self.proj_input.text().replace(" ", "-").replace("/", "-")
 
-            # Set general test parameters
-            # 1) Centre frequency
+            # Extract path
+            path = self.selected_path_label.text()
+
+            # Set screenshot filenames
+            filename_obw = f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OccupiedBandwidth.jpg"
+            filename_oob_oc = f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OC.jpg"
+            filename_oob_ofb = f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OFB-center.jpg"
+
+            # Centre frequency
             freq_unit = self.op_freq_input.unit_selector.currentText()
             centre_freq_raw = self.op_freq_input.input_field.text()
             centre_freq = self.convert_freq(float(centre_freq_raw), freq_unit)
-            self.fsv.set_center_freq(centre_freq)
 
-            sleep(1)
-
-            # 2) Span
+            # Span
             freq_unit = self.op_channel_width_input.unit_selector.currentText()
             ocw_raw = self.op_channel_width_input.input_field.text()
             ocw = self.convert_freq(float(ocw_raw), freq_unit)
-            span = 6*ocw
-            self.fsv.set_span(span)
 
-            sleep(1)
-
-            # 3) RBW
-            self.fsv.set_rbw(1000)
-
-            sleep(1)
-
-            # 4) Trace modes
-            self.fsv.set_trace_mode(1, 'maxhold')
-            sleep(1)
-            self.fsv.set_trace_mode(2, 'write')
-            sleep(1)
-
-            # 5) Detector mode
-            self.fsv.set_det_mode('rms')
-
-            # 6) ERP adjustment
+            # ERP adjustment
             if self.erp_input.text():
-                self.fsv.adjust_erp(self.erp_input.text())
+                self.fsv.adjust_erp(self.erp_input.text(), centre_freq, ocw, 100000)
 
-            # Measure OOB for operating channel
-            self.status_bar.showMessage('Measuring out-of-band emissions for the operating channel...')
-            QApplication.processEvents()
+            ## Parameters change from here on out, depending on tests performed
+            if self.checkbox_obw.isChecked() and self.checkbox_obw.isChecked():
 
-            limit_points_oc = [
-                (int(centre_freq - 2.5*ocw), -36),
-                (int(centre_freq - 0.5*ocw), 0),
-                (int(centre_freq - 0.5*ocw), 14),
-                (int(centre_freq + 0.5*ocw), 14),
-                (int(centre_freq + 0.5*ocw), 0),
-                (int(centre_freq + 2.5*ocw), -36)
-            ]
+                # First: OBW measurement
+                self.status_bar.showMessage('Measuring occupied bandwidth...')
+                tags.log('main', 'Starting OBW measurement.')
+                QApplication.processEvents()
 
-            oc_pass = self.fsv.measure_oob_oc(limit_points_oc, f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OC.jpg", self.selected_path_label.text())
+                obw_parameters = self.standard.calc_obw_parameters(ocw)
 
-            sleep(2)
+                measured_bandwidth = self.fsv.measure_obw(filename_obw, path, centre_freq, obw_parameters)
 
-            # Measure OOB for operational frequency band
-            self.status_bar.showMessage('Measuring out-of-band emissions for the operational frequency band...')
-            QApplication.processEvents()
+                # Second: OOB measurement
+                self.status_bar.showMessage('Measuring out-of-band emissions for the operating channel...')
+                tags.log('main', 'Starting OOB operating channel measurement.')
+                QApplication.processEvents()
 
-            f_low, f_high = self.determine_freq_range(centre_freq, fhss=False)  # TODO: FHSS true/false in der GUI abfragen
+                oob_parameters = self.standard.calc_oob_parameters(ocw)
+                self.fsv.prep_oob_parameters(oob_parameters)
 
-            limit_points_ofb = [
-                (f_low - 400000, -36),
-                (f_low - 200000, -36),
-                (f_low, 0),
-                (f_low, 14),
-                (f_high, 14),
-                (f_high, 0),
-                (f_high + 200000, -36),
-                (f_high + 400000, -36)
-            ]
+                limit_points_oc = self.standard.calc_limit_oc(centre_freq, ocw)
+                oc_pass = self.fsv.measure_oob_oc(limit_points_oc, filename_oob_oc, path)
+            
+                self.status_bar.showMessage('Measuring out-of-band emissions for the operational frequency band...')
+                tags.log('main', 'Starting OOB operational frequency band measurement.')
+                QApplication.processEvents()
 
-            ofb_pass = self.fsv.measure_oob_ofb(limit_points_ofb, f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OFB-center.jpg", self.selected_path_label.text())
+                f_low, f_high = self.determine_freq_range(centre_freq, fhss=False)  # TODO: FHSS true/false in der GUI abfragen
 
-            # cleanup display
-            self.fsv.set_center_freq(centre_freq)
-            self.fsv.set_span(span)
+                limit_points_ofb = self.standard.calc_limit_ofb(f_low, f_high)
+                ofb_pass = self.fsv.measure_oob_ofb(limit_points_ofb, filename_oob_ofb, path)
 
-            # Stop timer and display results
-            self.timer.stop()
-            elapsed_time = self.start_time.secsTo(QTime.currentTime())
-            self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time} seconds')
-            self.display_results(oc_pass, ofb_pass)
+                # cleanup display
+                self.fsv.set_center_freq(centre_freq)
+                self.fsv.set_span(6*ocw)
+
+                # Stop timer and display results
+                self.timer.stop()
+                elapsed_time = self.start_time.secsTo(QTime.currentTime())
+                self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time} seconds')
+                self.display_results(measured_bandwidth, oc_pass, ofb_pass)
+                tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}')
 
         else:
             QMessageBox.warning(self, 'Input Error', 'Please fill out all fields and select a path before starting the measurement.')
     
 
     # display results in bottom of GUI
-    def display_results(self, oc_pass, ofb_pass):
-        oc_status = "Operating Channel: <b><font color='green'>PASS</font></b>" if oc_pass else "Operating Channel: <b><font color='red'>FAIL</font></b>"
+    def display_results(self, obw, oc_pass, ofb_pass):
+        self.obw_result_label.setText(f'Measured Occupied Bandwidth: <b>{self.fsv.format_freq(str.strip(obw))}</b>')
+        oc_status = "OOB Operating Channel Test: <b><font color='green'>PASS</font></b>" if oc_pass else "Operating Channel: <b><font color='red'>FAIL</font></b>"
         self.op_channel_result_label.setText(oc_status)
-        ofb_status = "Operational Frequency Band: <b><font color='green'>PASS</font></b>" if ofb_pass else "Operational Frequency Band: <b><font color='red'>FAIL</font></b>"
+        ofb_status = "OOB Operational Frequency Band Test: <b><font color='green'>PASS</font></b>" if ofb_pass else "Operational Frequency Band: <b><font color='red'>FAIL</font></b>"
         self.op_band_result_label.setText(ofb_status)
         self.screenshots_path_label.setText(f'Screenshots saved at: <a href="{self.selected_path_label.text()}">{self.selected_path_label.text()}</a>')
 
     # determine frequency range with given operating frequency. returns lower and upper limits
-    def determine_freq_range(self, freq, fhss: bool, filename="bands_03-2024.csv"):
+    def determine_freq_range(self, freq, fhss: bool, filename="ERC-data/bands_03-2024.csv"):
 
         if fhss:
-            filename="bands_03-2024_FHSS.csv"
+            filename="ERC-data/bands_03-2024_FHSS.csv"
 
         with open(filename, 'r') as csvfile:
             reader = csv.reader(csvfile)
