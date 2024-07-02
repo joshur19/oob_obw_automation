@@ -1,7 +1,7 @@
 """
 file: base instrument class from which specific instrument classes are derived
 author: josh
-last updated: 26/06/2024
+last updated: 02/07/2024
 """
 
 # idea: create a class "instrument" that respresents a general t&m instrument with all its basic functions
@@ -18,24 +18,24 @@ class BaseInstrument:
         self.visa_address = visa_address
         self.instrument = None
 
-    def connect(self): 
+    def connect(self, name = ""): 
         try:
             self.instrument = self.rm.open_resource(self.visa_address)
             self.instrument.write_termination = '\n'
             self.instrument.read_termination = '\n'
             return True
         except:
-            tags.log('Instrument', 'Error connecting to instrument.')
+            tags.log('Instrument', f'Error connecting to instrument. {name}')
             return False
 
-    def initialize(self):
+    def initialize(self, name = ""):
         if self.connect():
             id = self.instrument.query('*IDN?')
             tags.log('Instrument', f"Succesfully connected to instrument {id}")
             self.instrument.write('*RST')
             self.disconnect()
         else:
-            tags.log('Instrument', 'Unable to connect to instrument.')
+            tags.log('Instrument', f'Unable to connect to instrument. {name}')
 
     def disconnect(self):
         self.instrument.close()

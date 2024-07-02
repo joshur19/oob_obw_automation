@@ -1,7 +1,7 @@
 """
 file: class for interfacing with R&S FSV signal analyzer
 author: josh
-last updated: 27/06/2024
+last updated: 02/07/2024
 """
 
 ### GENERAL TODOs
@@ -18,7 +18,7 @@ class FSV(instrument.BaseInstrument):
 
     def __init__(self, visa_address):
         super().__init__(visa_address)
-        if self.connect():
+        if self.connect('FSV'):
             self.instrument.write('SYST:DISP:UPD ON')
 
     ### GENERAL PARAMETERS

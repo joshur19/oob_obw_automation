@@ -1,7 +1,7 @@
 """
 file: derived instrument class for Spitzenberger Spies "power supply"
 author: josh
-last updated: 26/06/2024
+last updated: 02/07/2024
 """
 
 import instrument
@@ -15,7 +15,7 @@ class SPS(instrument.BaseInstrument):
 
     # initialize system for direct voltage supply
     def initialize(self):
-        if self.connect():
+        if self.connect('SPS'):
             self.instrument.write('DCL')   # reset SyCore to default settings
             sleep(2)
             self.disconnect()
