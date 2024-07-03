@@ -438,7 +438,9 @@ class OutOfBandMeasurementAutomation(QWidget):
     
     # function containing logic for applying nominal voltage with GUI input
     def apply_nom_voltage(self, voltage):
-        if float(voltage) > 270.0 or float(voltage) <= 0.0:
+        voltage = float(voltage)
+
+        if voltage > 270.0 or voltage <= 0.0:
             QMessageBox.warning(self, 'Input Error', 'Please enter a valid voltage.')
             return
         

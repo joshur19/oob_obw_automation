@@ -15,7 +15,7 @@ class SPS(instrument.BaseInstrument):
 
     # initialize system for direct voltage supply
     def initialize(self):
-        if self.connect():
+        if self.connect('SPS'):
             self.instrument.write('DCL')   # reset SyCore to default settings
             sleep(2)
             self.disconnect()
@@ -28,8 +28,9 @@ class SPS(instrument.BaseInstrument):
             ars.write('H_I_RANGE=8')        # configuration for ARS direct mode without harmonics/flicker
             sleep(1)
             ars.close()
+            tags.log('SPS', 'Succesfully connected to SPS and initialized ARS to direct mode.')
         except:
-            tags.log('SPS', 'Error initializing ARS to direct mode.')
+            tags.log('SPS', 'Initialization: Error initializing ARS to direct mode.')
 
     # turn amp off
     def set_amp_off(self):

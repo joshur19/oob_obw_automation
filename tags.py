@@ -13,4 +13,4 @@ fsv_addr = 'TCPIP0::172.16.111.222::inst0::INSTR'
 inputfield_width = 80
 
 def log(tag, message):
-    print(f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]} -- LOG -- {tag}: {message}')
+    print(f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]} -- LOG -- [{tag}] {message}')

@@ -20,6 +20,7 @@ class FSV(instrument.BaseInstrument):
         super().__init__(visa_address)
         if self.connect('FSV'):
             self.instrument.write('SYST:DISP:UPD ON')
+            self.disconnect()
 
     ### GENERAL PARAMETERS
     # set center frequency within limits specified by manual (up to 30 GHz)
