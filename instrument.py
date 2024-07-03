@@ -21,8 +21,6 @@ class BaseInstrument:
     def connect(self, name = ""): 
         try:
             self.instrument = self.rm.open_resource(self.visa_address)
-            self.instrument.write_termination = '\n'
-            self.instrument.read_termination = '\n'
             return True
         except:
             tags.log('Instrument', f'Error connecting to instrument. {name}')
@@ -31,7 +29,7 @@ class BaseInstrument:
     def initialize(self, name = ""):
         if self.connect():
             id = self.instrument.query('*IDN?')
-            tags.log('Instrument', f"Succesfully connected to instrument {id}")
+            tags.log('Instrument', f"Succesfully connected to instrument {id.strip()}")
             self.instrument.write('*RST')
             self.disconnect()
         else:

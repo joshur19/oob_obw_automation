@@ -394,6 +394,8 @@ class OutOfBandMeasurementAutomation(QWidget):
                 elapsed_time = self.display_results(oc_pass=oc_pass, ofb_pass=ofb_pass, oob_measured=True)
                 tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}')
 
+            self.sps.set_amp_off()
+
         else:
             QMessageBox.warning(self, 'Input Error', 'Please fill out all fields and select a path before starting the measurement.')
     
@@ -436,7 +438,7 @@ class OutOfBandMeasurementAutomation(QWidget):
     
     # function containing logic for applying nominal voltage with GUI input
     def apply_nom_voltage(self, voltage):
-        if voltage > 270 or voltage <= 0:
+        if float(voltage) > 270.0 or float(voltage) <= 0.0:
             QMessageBox.warning(self, 'Input Error', 'Please enter a valid voltage.')
             return
         
@@ -450,7 +452,8 @@ class OutOfBandMeasurementAutomation(QWidget):
 
             self.sps.set_voltage_ac(voltage, ac_freq)
 
-        sleep(10)
+        ## TODO: check if voltage was succesfully applied 
+        sleep(10)       # allow for EUT to boot and reach normal operating mode
 
     # display results in bottom of GUI
     def display_results(self, obw = 1000, oc_pass = False, ofb_pass = False, obw_measured = False, oob_measured = False):
