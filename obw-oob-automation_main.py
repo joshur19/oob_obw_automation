@@ -157,11 +157,28 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         self.ac_radio.toggled.connect(self.toggle_frequency_input)
 
+        # EUT-specific boot time
+        self.eut_boot_validator = QDoubleValidator(0.0, 3600, 1, notation=QDoubleValidator.StandardNotation)
+        self.eut_boot_validator.setLocale(QLocale(QLocale.English))
+
+        eut_boot_layout = QHBoxLayout()
+        eut_boot_label = QLabel('(Optional) EUT boot time to intended operation mode:')
+        self.eut_boot_input = QLineEdit()
+        self.eut_boot_input.setValidator(self.eut_boot_validator)
+        self.eut_boot_input.setFixedWidth(tags.inputfield_width)
+        sec_label = QLabel('s')
+
+        eut_boot_layout.addWidget(eut_boot_label)
+        eut_boot_layout.addStretch()
+        eut_boot_layout.addWidget(self.eut_boot_input)
+        eut_boot_layout.addWidget(sec_label)
+
         # Finish up manufacturer info group
         man_info_layout.addWidget(self.op_freq_input)
         man_info_layout.addWidget(self.op_channel_width_input)
         man_info_layout.addLayout(nom_volt_layout)
         man_info_layout.addLayout(ac_freq_layout)
+        man_info_layout.addLayout(eut_boot_layout)
 
         man_info_group.setLayout(man_info_layout)
 
@@ -175,7 +192,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.dbm_validator.setLocale(QLocale(QLocale.English))
 
         erp_layout = QHBoxLayout()
-        erp_label = QLabel('Maximum e.r.p as measured (SAC):')
+        erp_label = QLabel('(Optional) Maximum e.r.p as measured (SAC):')
         self.erp_input = QLineEdit()
         self.erp_input.setValidator(self.dbm_validator)
         self.erp_input.setFixedWidth(tags.inputfield_width)
@@ -255,14 +272,22 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.checkbox_dm2 = QCheckBox('EUT generates test signal of type D-M2')
         
         # Start measurement button
+        bold_font = QFont()
+        bold_font.setBold(True)
         self.start_button = QPushButton('Start Automated Measurement')
+        self.start_button.setFont(bold_font)
         self.start_button.clicked.connect(self.execute_measurement)
+
+        # Stop measurement button
+        self.stop_button = QPushButton('Interrupt Automated Measurement')
+        self.stop_button.setEnabled(False)
 
         exec_layout.addWidget(self.checkbox_obw)
         exec_layout.addWidget(self.checkbox_oob)
         exec_layout.addWidget(self.checkbox_temp)
         exec_layout.addWidget(self.checkbox_volt)
         exec_layout.addWidget(self.start_button)
+        exec_layout.addWidget(self.stop_button)
 
         exec_group.setLayout(exec_layout)
 
@@ -426,6 +451,7 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.measurement_thread.measurement_complete.connect(self.display_results)
             self.measurement_thread.start()
             self.start_button.setEnabled(False)
+            self.stop_button.setEnabled(True)
     
     # function containing all GUI and instrument logic for occupied bandwidth measurement
     def execute_obw_measurement(self, ocw, centre_freq, path, filename_obw):
@@ -483,7 +509,11 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.sps.set_voltage_ac(voltage, ac_freq)
 
         ## TODO: check if voltage was succesfully applied 
-        sleep(10)       # allow for EUT to boot and reach normal operating mode
+        delay = 10
+        if self.eut_boot_input.text():
+            delay = float(self.eut_boot_input.text())
+
+        sleep(delay)       # allow for EUT to boot and reach normal operating mode
 
     # display results in bottom of GUI
     def display_results(self, results):
@@ -493,6 +523,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time} seconds')
         tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}s')
         self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
 
         obw_measured = results.get('obw_measured', False)
         oob_measured = results.get('oob_measured', False)
