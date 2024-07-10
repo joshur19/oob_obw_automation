@@ -1,7 +1,7 @@
 """
-file: 
-author: 
-last updated: 02/07/2024
+file: main file for OBW and OOB measurement automation in the context of EN 300 220-1
+author: rueck.joshua@gmail.com
+last updated: 10/07/2024
 """
 
 import sys
@@ -13,8 +13,68 @@ import EN_300_220_1
 import datetime
 from time import sleep
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton)
-from PyQt5.QtCore import Qt, QTime, QTimer, QLocale
-from PyQt5.QtGui import QDoubleValidator, QFont, QPalette, QColor
+from PyQt5.QtCore import Qt, QTime, QTimer, QLocale, QThread, pyqtSignal
+from PyQt5.QtGui import QDoubleValidator, QFont
+
+class MeasurementThread(QThread):
+    measurement_complete = pyqtSignal(dict)
+
+    def __init__(self, parent, fsv, sps, standard, inputs):
+        super().__init__()
+        self.parent = parent
+        self.fsv = fsv
+        self.sps = sps
+        self.standard = standard
+        self.inputs = inputs
+
+    def run(self):
+        try:
+            results = {}
+
+            path = self.inputs['path']
+            filename_obw = self.inputs['filename_obw']
+            filename_oob_oc = self.inputs['filename_oob_oc']
+            filename_oob_ofb = self.inputs['filename_oob_ofb']
+            centre_freq = self.inputs['centre_freq']
+            ocw = self.inputs['ocw']
+            voltage = self.inputs['voltage']
+            measure_obw = self.inputs['measure_obw']
+            measure_oob = self.inputs['measure_oob']
+            
+            self.parent.apply_nom_voltage(voltage)
+
+            if measure_obw and measure_oob:
+                measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
+                oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                results = {
+                    'obw': measured_bandwidth,
+                    'oc_pass': oc_pass,
+                    'ofb_pass': ofb_pass,
+                    'obw_measured': True,
+                    'oob_measured': True
+                }
+            elif measure_obw:
+                measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
+                results = {
+                    'obw': measured_bandwidth,
+                    'obw_measured': True,
+                    'oob_measured': False
+                }
+            elif measure_oob:
+                oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                results = {
+                    'oc_pass': oc_pass,
+                    'ofb_pass': ofb_pass,
+                    'obw_measured': False,
+                    'oob_measured': True
+                }
+            
+            self.sps.set_amp_off()
+
+            self.measurement_complete.emit(results)
+
+        except Exception as e:
+            print(e)
 
 class OutOfBandMeasurementAutomation(QWidget):
     def __init__(self):
@@ -286,31 +346,33 @@ class OutOfBandMeasurementAutomation(QWidget):
     # check inputs before starting measurement
     def validate_inputs(self):
 
-        always_required_inputs = (
-            self.proj_input.text() and
-            self.op_freq_input.input_field.text() and
-            self.nom_volt_input.text() and
-            self.op_channel_width_input.input_field.text() and
-            self.selected_path_label.text()
-        )
-
-        total_input = always_required_inputs
+        if not self.proj_input.text():
+            QMessageBox.warning(self, 'Input Error', 'Please enter the project number.')
+            return False
+        if not self.op_freq_input.input_field.text():
+            QMessageBox.warning(self, 'Input Error', 'Please enter the operating frequency.')
+            return False
+        if not self.nom_volt_input.text():
+            QMessageBox.warning(self, 'Input Error', 'Please enter the nominal operating voltage.')
+            return False
+        if not self.op_channel_width_input.input_field.text():
+            QMessageBox.warning(self, 'Input Error', 'Please enter the operating channel width.')
+            return False
+        if not self.selected_path_label.text():
+            QMessageBox.warning(self, 'Input Error', 'Please select a path for saving screenshots.')
+            return False
 
         if self.checkbox_temp.isChecked():
-            further_inputs = (
-                self.min_temp_input.text() and
-                self.max_temp_input.text()
-            )
-            total_input = further_inputs and always_required_inputs
+            if not self.min_temp_input.text() or not self.max_temp_input.text():
+                QMessageBox.warning(self, 'Input Error', 'Please enter the extreme temperature range.')
+                return False
 
         if self.checkbox_volt.isChecked():
-            further_inputs = (
-                self.min_volt_input.text() and
-                self.max_volt_input.text()
-            )
-            total_input = further_inputs and always_required_inputs
+            if not self.min_volt_input.text() or not self.max_volt_input.text():
+                QMessageBox.warning(self, 'Input Error', 'Please enter the extreme voltage range.')
+                return False
 
-        return total_input
+        return True
 
     # convert frequency of specific unit multiple to Hz for further consistent processing
     def convert_freq(self, freq, unit):
@@ -334,20 +396,8 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.start_time = QTime.currentTime()
             self.timer.start(1000)  # Update every second
 
-            # Apply nominal voltage to device
-            voltage = self.nom_volt_input.text()
-            self.apply_nom_voltage(voltage)
-
             # Extract project number
             project_nr = self.proj_input.text().replace(" ", "-").replace("/", "-")
-
-            # Extract path
-            path = self.selected_path_label.text()
-
-            # Set screenshot filenames
-            filename_obw = f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OccupiedBandwidth.jpg"
-            filename_oob_oc = f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OC.jpg"
-            filename_oob_ofb = f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OFB-center.jpg"
 
             # Centre frequency
             freq_unit = self.op_freq_input.unit_selector.currentText()
@@ -359,45 +409,23 @@ class OutOfBandMeasurementAutomation(QWidget):
             ocw_raw = self.op_channel_width_input.input_field.text()
             ocw = self.convert_freq(float(ocw_raw), freq_unit)
 
-            # ERP adjustment
-            if self.erp_input.text():
-                self.fsv.adjust_erp(self.erp_input.text(), centre_freq, ocw, 100000)
+            ## Prepare inputs and execute measurements in asynchronous thread
+            inputs = {
+                'path': self.selected_path_label.text(),
+                'filename_obw': f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OccupiedBandwidth.jpg",
+                'filename_oob_oc': f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OC.jpg",
+                'filename_oob_ofb': f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OOB-OFB-center.jpg",
+                'centre_freq': centre_freq,
+                'ocw': ocw,
+                'voltage': self.nom_volt_input.text(),
+                'measure_obw': self.checkbox_obw.isChecked(),
+                'measure_oob': self.checkbox_oob.isChecked()
+            }
 
-            ## Parameters change from here on out, depending on tests performed
-            if self.checkbox_obw.isChecked() and self.checkbox_oob.isChecked():
-
-                # First: OBW measurement
-                measured_bandwidth = self.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
-
-                # Second: OOB measurement
-                oc_pass, ofb_pass = self.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
-
-                # Display results
-                elapsed_time = self.display_results(obw=measured_bandwidth, oc_pass=oc_pass, ofb_pass=ofb_pass, obw_measured=True, oob_measured=True)
-                tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}')
-
-            elif self.checkbox_obw.isChecked() and not self.checkbox_oob.isChecked():
-
-                # Execute only OBW measurement
-                measured_bandwidth = self.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
-
-                # Display results
-                elapsed_time = self.display_results(obw=measured_bandwidth, obw_measured=True)
-                tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}')
-
-            elif not self.checkbox_obw.isChecked() and self.checkbox_oob.isChecked():
-
-                # Execute only OOB measurement
-                oc_pass, ofb_pass = self.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
-
-                # Display results
-                elapsed_time = self.display_results(oc_pass=oc_pass, ofb_pass=ofb_pass, oob_measured=True)
-                tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}')
-
-            self.sps.set_amp_off()
-
-        else:
-            QMessageBox.warning(self, 'Input Error', 'Please fill out all fields and select a path before starting the measurement.')
+            self.measurement_thread = MeasurementThread(self, self.fsv, self.sps, self.standard, inputs)
+            self.measurement_thread.measurement_complete.connect(self.display_results)
+            self.measurement_thread.start()
+            self.start_button.setEnabled(False)
     
     # function containing all GUI and instrument logic for occupied bandwidth measurement
     def execute_obw_measurement(self, ocw, centre_freq, path, filename_obw):
@@ -416,7 +444,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         QApplication.processEvents()
 
         oob_parameters = self.standard.calc_oob_parameters(ocw)
-        self.fsv.prep_oob_parameters(oob_parameters)
+        self.fsv.prep_oob_parameters(centre_freq, oob_parameters)
 
         limit_points_oc = self.standard.calc_limit_oc(centre_freq, ocw)
         oc_pass = self.fsv.measure_oob_oc(limit_points_oc, filename_oob_oc, path)
@@ -458,24 +486,31 @@ class OutOfBandMeasurementAutomation(QWidget):
         sleep(10)       # allow for EUT to boot and reach normal operating mode
 
     # display results in bottom of GUI
-    def display_results(self, obw = 1000, oc_pass = False, ofb_pass = False, obw_measured = False, oob_measured = False):
+    def display_results(self, results):
 
         self.timer.stop()
         elapsed_time = self.start_time.secsTo(QTime.currentTime())
         self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time} seconds')
+        tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}s')
+        self.start_button.setEnabled(True)
+
+        obw_measured = results.get('obw_measured', False)
+        oob_measured = results.get('oob_measured', False)
         
         if obw_measured:
+            obw = results['obw']
             self.obw_result_label.setText(f'Measured Occupied Bandwidth: <b>{self.fsv.format_freq(str.strip(obw))}</b>')
         
         if oob_measured:
+            oc_pass = results['oc_pass']
             oc_status = "OOB Operating Channel Test: <b><font color='green'>PASS</font></b>" if oc_pass else "Operating Channel: <b><font color='red'>FAIL</font></b>"
             self.op_channel_result_label.setText(oc_status)
+            
+            ofb_pass = results['ofb_pass']
             ofb_status = "OOB Operational Frequency Band Test: <b><font color='green'>PASS</font></b>" if ofb_pass else "Operational Frequency Band: <b><font color='red'>FAIL</font></b>"
             self.op_band_result_label.setText(ofb_status)
 
         self.screenshots_path_label.setText(f'Screenshots saved at: <a href="{self.selected_path_label.text()}">{self.selected_path_label.text()}</a>')
-
-        return elapsed_time
 
     # determine frequency range with given operating frequency. returns lower and upper limits
     def determine_freq_range(self, freq, fhss: bool, filename="ERC-data/bands_03-2024.csv"):

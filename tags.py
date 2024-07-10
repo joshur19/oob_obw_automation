@@ -1,6 +1,6 @@
 """
 file: contains constants referenced in other parts of program, constant values and such
-author: josh
+author: rueck.joshua@gmail.com
 last updated: 25/06/2024
 """
 

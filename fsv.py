@@ -1,7 +1,7 @@
 """
 file: class for interfacing with R&S FSV signal analyzer
-author: josh
-last updated: 02/07/2024
+author: rueck.joshua@gmail.com
+last updated: 10/07/2024
 """
 
 ### GENERAL TODOs
@@ -245,9 +245,13 @@ class FSV(instrument.BaseInstrument):
             return None
         
     # setup instrument for OOB measurement
-    def prep_oob_parameters(self, oob_parameters):
+    def prep_oob_parameters(self, centre_freq, oob_parameters):
         if self.connect():
             # prepare parameters
+            self.set_center_freq_connected(centre_freq)
+            sleep(0.5)
+            self.set_span_connected(oob_parameters['span'])
+            sleep(0.5)
             self.set_rbw_connected(oob_parameters['rbw'])
             sleep(0.5)
             self.set_trace_mode_connected(1, 'maxhold')

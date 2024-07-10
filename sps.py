@@ -1,6 +1,6 @@
 """
 file: derived instrument class for Spitzenberger Spies "power supply"
-author: josh
+author: rueck.joshua@gmail.com
 last updated: 03/07/2024
 """
 

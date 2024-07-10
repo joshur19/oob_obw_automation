@@ -1,6 +1,6 @@
 """
 file: base instrument class from which specific instrument classes are derived
-author: josh
+author: rueck.joshua@gmail.com
 last updated: 02/07/2024
 """
 

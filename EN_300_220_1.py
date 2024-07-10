@@ -1,4 +1,8 @@
-
+"""
+file: EN 300 220-1 class for handling standard-specific test parameters
+author: rueck.joshua@gmail.com
+last updated: 02/07/2024
+"""
 
 class EN_300_220_1:
 
