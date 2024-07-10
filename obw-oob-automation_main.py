@@ -40,12 +40,20 @@ class MeasurementThread(QThread):
             voltage = self.inputs['voltage']
             measure_obw = self.inputs['measure_obw']
             measure_oob = self.inputs['measure_oob']
+            self.stop_flag = False
             
             self.parent.apply_nom_voltage(voltage)
 
+            if self.stop_flag:
+                return
+
             if measure_obw and measure_oob:
                 measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
+                if self.stop_flag:
+                    return
                 oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                if self.stop_flag:
+                    return
                 results = {
                     'obw': measured_bandwidth,
                     'oc_pass': oc_pass,
@@ -55,6 +63,8 @@ class MeasurementThread(QThread):
                 }
             elif measure_obw:
                 measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
+                if self.stop_flag:
+                    return
                 results = {
                     'obw': measured_bandwidth,
                     'obw_measured': True,
@@ -62,6 +72,8 @@ class MeasurementThread(QThread):
                 }
             elif measure_oob:
                 oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                if self.stop_flag:
+                    return
                 results = {
                     'oc_pass': oc_pass,
                     'ofb_pass': ofb_pass,
@@ -70,11 +82,17 @@ class MeasurementThread(QThread):
                 }
             
             self.sps.set_amp_off()
-
-            self.measurement_complete.emit(results)
+            
+            if not self.stop_flag:
+                self.measurement_complete.emit(results)
 
         except Exception as e:
             print(e)
+
+    def stop(self):
+        self.stop_flag = True
+        self.sps.stop_operation()
+        self.fsv.stop_operation()
 
 class OutOfBandMeasurementAutomation(QWidget):
     def __init__(self):
@@ -280,6 +298,7 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         # Stop measurement button
         self.stop_button = QPushButton('Interrupt Automated Measurement')
+        self.stop_button.clicked.connect(self.stop_measurement)
         self.stop_button.setEnabled(False)
 
         exec_layout.addWidget(self.checkbox_obw)
@@ -452,6 +471,17 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.measurement_thread.start()
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
+
+    def stop_measurement(self):
+        if hasattr(self, 'measurement_thread'):
+            tags.log('main', 'Stop measurement button clicked.')
+            self.measurement_thread.stop()
+            self.measurement_thread.wait()
+            sleep(2)
+            self.sps.set_amp_off()
+            self.status_bar.showMessage('Measurement interrupted.')
+            self.start_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
     
     # function containing all GUI and instrument logic for occupied bandwidth measurement
     def execute_obw_measurement(self, ocw, centre_freq, path, filename_obw):
@@ -485,8 +515,9 @@ class OutOfBandMeasurementAutomation(QWidget):
         ofb_pass = self.fsv.measure_oob_ofb(limit_points_ofb, filename_oob_ofb, path)
 
         # cleanup display
-        self.fsv.set_center_freq(centre_freq)
-        self.fsv.set_span(6*ocw)
+        if ofb_pass:
+            self.fsv.set_center_freq(centre_freq)
+            self.fsv.set_span(6*ocw)
 
         return oc_pass, ofb_pass
     

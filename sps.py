@@ -1,7 +1,7 @@
 """
 file: derived instrument class for Spitzenberger Spies "power supply"
 author: rueck.joshua@gmail.com
-last updated: 03/07/2024
+last updated: 10/07/2024
 """
 
 import instrument
@@ -12,6 +12,7 @@ class SPS(instrument.BaseInstrument):
 
     def __init__(self, visa_address):
         super().__init__(visa_address)
+        self.stop_flag = False
 
     # initialize system for direct voltage supply
     def initialize(self):
@@ -32,6 +33,22 @@ class SPS(instrument.BaseInstrument):
         except:
             tags.log('SPS', 'Initialization: Error initializing ARS to direct mode.')
 
+    # set stop flag for interruption
+    def stop_operation(self):
+        self.stop_flag = True
+
+    # check if stop flag has been set
+    def check_stop(self):
+        if self.stop_flag:
+            raise InterruptedError('Measurement was stopped.')
+
+    # reset
+    def reset(self):
+        if self.connect('SPS'):
+            self.instrument.write('DCL')
+            sleep(2)
+            self.disconnect()
+
     # turn amp off
     def set_amp_off(self):
         if self.connect():
@@ -45,49 +62,67 @@ class SPS(instrument.BaseInstrument):
 
     # set voltage DC
     def set_voltage_dc(self, voltage):
-        if self.connect():
+        try:
+            if self.connect():
 
-            self.instrument.write('DCL')                        # reset instrument to default state
-            sleep(4)
+                self.instrument.write('DCL')                        # reset instrument to default state
+                sleep(4)
 
-            range = self.determine_range(voltage)
-            
-            self.instrument.write(f'AMP:RANGE {range}')         # set appropriate amplifier range
-            sleep(3)
-            self.instrument.write('AMP:MODE:DC')                # set amplifier to DC mode
-            sleep(1)
-            self.instrument.write('OSC:PAGE:FUNC 1,"DC"')       # set oscillator to DC mode (phase 1)
-            sleep(1)
-            self.instrument.write(f'OSC:AMP 1,{voltage}V')      # set oscillator amplitude to voltage (phase 1)
-            sleep(7)
-            self.instrument.write('AMP:OUTPUT 1')               # turn on amplifier output
-            sleep(1)
-            
+                range = self.determine_range(voltage)
+                
+                self.instrument.write(f'AMP:RANGE {range}')         # set appropriate amplifier range
+                self.check_stop()
+                sleep(3)
+                self.instrument.write('AMP:MODE:DC')                # set amplifier to DC mode
+                sleep(1)
+                self.instrument.write('OSC:PAGE:FUNC 1,"DC"')       # set oscillator to DC mode (phase 1)
+                sleep(1)
+                self.instrument.write(f'OSC:AMP 1,{voltage}V')      # set oscillator amplitude to voltage (phase 1)
+                self.check_stop()
+                sleep(7)
+                self.check_stop()
+                self.instrument.write('AMP:OUTPUT 1')               # turn on amplifier output
+                sleep(1)
+                
+                self.disconnect()
+                tags.log('SPS', f'DC voltage set to {voltage}V')
+
+        except InterruptedError:
             self.disconnect()
-            tags.log('SPS', f'DC voltage set to {voltage}V')
+            tags.log('SPS', 'Measurement interrupted.')
+            return None
 
     # set voltage AC
     def set_voltage_ac(self, voltage, freq):
-        if self.connect():
+        try:
+            if self.connect():
 
-            self.instrument.write('DCL')                        # reset instrument to default state
-            sleep(4)
+                self.instrument.write('DCL')                        # reset instrument to default state
+                sleep(4)
 
-            range = self.determine_range(voltage)
+                range = self.determine_range(voltage)
 
-            self.instrument.write(f'AMP:RANGE {range}')         # set appropriate amplifier range
-            sleep(3)    
-            self.instrument.write('AMP:MODE:AC')                # set amplifier to DC mode
-            sleep(1)
-            self.instrument.write(f'OSC:FREQ {freq}')           # set oscillator frequency
-            sleep(1)
-            self.instrument.write(f'OSC:AMP 1,{voltage}V')      # set oscillator amplitude to voltage (phase 1)
-            sleep(7)
-            self.instrument.write('AMP:OUTPUT 1')               # turn on amplifier output
-            sleep(1)
+                self.instrument.write(f'AMP:RANGE {range}')         # set appropriate amplifier range
+                self.check_stop()
+                sleep(3)    
+                self.instrument.write('AMP:MODE:AC')                # set amplifier to DC mode
+                sleep(1)
+                self.instrument.write(f'OSC:FREQ {freq}')           # set oscillator frequency
+                sleep(1)
+                self.instrument.write(f'OSC:AMP 1,{voltage}V')      # set oscillator amplitude to voltage (phase 1)
+                self.check_stop()
+                sleep(7)
+                self.check_stop()
+                self.instrument.write('AMP:OUTPUT 1')               # turn on amplifier output
+                sleep(1)
 
+                self.disconnect()
+                tags.log('SPS', f'AC voltage set to {voltage}V at {freq}Hz')
+
+        except InterruptedError:
             self.disconnect()
-            tags.log('SPS', f'AC voltage set to {voltage}V at {freq}Hz')
+            tags.log('SPS', 'Measurement interrupted.')
+            return None
 
     # helper function for range selection
     def determine_range(self, voltage):

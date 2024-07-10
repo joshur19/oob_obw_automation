@@ -6,7 +6,7 @@
 - [ ] Integrate climatic test chamber into test process
 - [ ] Implement queries after relevant executed process in order to guarantee correct execution (SPS!)
 - [x] Add multithreading to prevent GUI from freezing up during measurement
-- [ ] Add 'emergency stop' button to safely stop measurement in case of failure of some kind
+- [x] Add 'emergency stop' button to safely stop measurement in case of failure of some kind
 - [x] Implement custom time delay for EUT-specific boot time after power on
 - [ ] Implement more complete error handling
 - [ ] Detect if any connection interrupted during testing and stop measurement
