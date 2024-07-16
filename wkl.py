@@ -1,3 +1,9 @@
+"""
+file: implementation of class for climatic test chamber based on work by Matias Senger on GitHub
+author: rueck.joshua@gmail.com
+last updated: 16/07/2024
+"""
+
 import tags
 from VotschTechnikClimateChamber.ClimateChamber import ClimateChamber
 
@@ -8,7 +14,7 @@ class WKL(ClimateChamber):
 
     def set_temperature(self, temp):
         try:
-            if self.temperature_min < temp < self.temperature_max:
+            if self.temperature_min < float(temp) < self.temperature_max:
                 if not self.is_running:
                     self.temperature_set_point = temp
                     self.start()

@@ -1,24 +1,25 @@
 """
 file: main file for OBW and OOB measurement automation in the context of EN 300 220-1
 author: rueck.joshua@gmail.com
-last updated: 10/07/2024
+last updated: 16/07/2024
 """
 
 import sys
+import csv
+import datetime
+from time import sleep
 import fsv
 import sps
 import wkl
-import csv
 import tags
-import socket
 import EN_300_220_1
-import datetime
-from time import sleep
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton)
 from PyQt5.QtCore import Qt, QTime, QTimer, QLocale, QThread, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QFont
 
+# Class handling the measurement operation in a background thread once the measurement button is clicked
 class MeasurementThread(QThread):
+
     measurement_complete = pyqtSignal(dict)
 
     def __init__(self, parent, fsv, sps, chamber, standard, inputs):
@@ -34,6 +35,7 @@ class MeasurementThread(QThread):
         try:
             results = {}
 
+            # prepare all parameters that were transmitted from main thread
             path = self.inputs['path']
             filename_obw = self.inputs['filename_obw']
             filename_oob_oc = self.inputs['filename_oob_oc']
@@ -49,17 +51,18 @@ class MeasurementThread(QThread):
             measure_oob = self.inputs['measure_oob']
             measure_ex = self.inputs['measure_ex']
             self.stop_flag = False
-            
+
+            # apply nominal voltage to EUT with SPS power supply
             self.parent.apply_nom_voltage(voltage)
 
             if self.stop_flag:
                 self.cleanup()
                 return
 
-            # if both tests should be performed
+            ### IF BOTH TESTS (OBW + OOB) should be performed
             if measure_obw and measure_oob:
 
-                # if tests should be performed under extreme conditions
+                # IF EXTREME CONDITIONS should be performed for both tests
                 if measure_ex:
 
                     # prepare structures for results
@@ -67,7 +70,7 @@ class MeasurementThread(QThread):
                     oc_passes = []
                     ofb_passes = []
 
-                    ## 1) execute tests under nominal conditions
+                    ## 1) EXECUTE TESTS UNDER NORMAL CONDITIONS
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
                     oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
 
@@ -75,23 +78,21 @@ class MeasurementThread(QThread):
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
 
-                    ## 2) set temperature to max temp
-                    if not self.chamber.set_temperature(temp_max):
-                        self.parent.show_warning('Error setting temperature', f"""Either chamber is already running or temperature not in range. 
-                                                 Temperature has to be in between {self.chamber.temperature_min} °C and {self.chamber.temperature_max} °C.""")
+                    if self.stop_flag:
                         self.cleanup()
                         return
-                    
-                    # wait for the temperature to stabilize ??
-                    sleep(600) # 10 mins
+
+                    ## 2) EXECUTE TESTS UNDER EXTREME VOLTAGE AT MAXIMUM TEMP
+                    if not self.set_temperature_and_wait(temp_max):
+                        return
 
                     # set voltage to min volt
-                    if not self.parent.apply_ex_voltage(volt_min):
-                        self.parent.show_warning('Error applying voltage', 'Error applying minimum voltage.')
-                        self.cleanup()
+                    if not self.set_ex_voltage(volt_min):
                         return
 
-                    # execute both tests
+                    self.fsv.reset()
+
+                    # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_maxtemp_minvolt" + ".jpg"
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
 
@@ -103,13 +104,17 @@ class MeasurementThread(QThread):
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
 
-                    # set voltage to max volt
-                    if not self.parent.apply_ex_voltage(volt_max):
-                        self.parent.show_warning('Error applying voltage', 'Error applying maximum voltage.')
+                    if self.stop_flag:
                         self.cleanup()
                         return
+
+                    # set voltage to max volt
+                    if not self.set_ex_voltage(volt_max):
+                        return
                     
-                    # execute both tests
+                    self.fsv.reset()
+                    
+                    # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_maxtemp_maxvolt" + ".jpg"
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
 
@@ -121,23 +126,26 @@ class MeasurementThread(QThread):
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
 
-                    ## 3) set temperature to min temp
-                    if not self.chamber.set_temperature(temp_min):
-                        self.parent.show_warning('Error setting temperature', f"""Either chamber is already running or temperature not in range. 
-                                                 Temperature has to be in between {self.chamber.temperature_min} °C and {self.chamber.temperature_max} °C.""")
+                    if self.stop_flag:
                         self.cleanup()
                         return
                     
-                    # wait for the temperature to stabilize ??
-                    sleep(600) # 10 mins
+                    self.chamber.stop()
+                    sleep(2)
 
-                    # set voltage to min volt
-                    if not self.parent.apply_ex_voltage(volt_min):
-                        self.parent.show_warning('Error applying voltage', 'Error applying minimum voltage.')
-                        self.cleanup()
+                    self.set_ex_voltage(voltage)
+
+                    ## 3) EXECUTE TESTS UNDER EXTREME VOLTAGE AT MINIMUM TEMP
+                    if not self.set_temperature_and_wait(temp_min):
                         return
 
-                    # execute both tests
+                    # set voltage to min volt
+                    if not self.set_ex_voltage(volt_min):
+                        return
+                    
+                    self.fsv.reset()
+
+                    # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_mintemp_minvolt" + ".jpg"
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
 
@@ -149,13 +157,17 @@ class MeasurementThread(QThread):
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
 
-                    # set voltage to max volt
-                    if not self.parent.apply_ex_voltage(volt_max):
-                        self.parent.show_warning('Error applying voltage', 'Error applying maximum voltage.')
+                    if self.stop_flag:
                         self.cleanup()
                         return
+
+                    # set voltage to max volt
+                    if not self.set_ex_voltage(volt_max):
+                        return
                     
-                    # execute both tests
+                    self.fsv.reset()
+                    
+                    # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_mintemp_maxvolt" + ".jpg"
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
 
@@ -177,7 +189,7 @@ class MeasurementThread(QThread):
                         'oob_measured': True
                     }
 
-                # if tests should be performed under normal conditions
+                # IF ONLY NORMAL CONDITIONS for BOTH tests
                 else:
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
                     if self.stop_flag:
@@ -188,58 +200,300 @@ class MeasurementThread(QThread):
                         self.cleanup()
                         return
                     
-                results = {
-                    'obw': measured_bandwidth,
-                    'oc_pass': oc_pass,
-                    'ofb_pass': ofb_pass,
-                    'obw_measured': True,
-                    'oob_measured': True
-                }
+                    results = {
+                        'measure_ex': False,
+                        'obw': measured_bandwidth,
+                        'oc_pass': oc_pass,
+                        'ofb_pass': ofb_pass,
+                        'obw_measured': True,
+                        'oob_measured': True
+                    }
 
-            # if only OBW test should be performed
+            ### IF ONLY OBW TEST should be performed
             elif measure_obw:
-                measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
-                if self.stop_flag:
-                    self.cleanup()
-                    return
-                results = {
-                    'obw': measured_bandwidth,
-                    'obw_measured': True,
-                    'oob_measured': False
-                }
 
-            # if only OOB test should be performed
+                # IF EXTREME CONDITIONS for obw test
+                if measure_ex:
+
+                    # prepare structures for results
+                    bandwidths = []
+
+                    ## 1) EXECUTE OBW TEST UNDER NORMAL CONDITIONS
+                    measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
+                    bandwidths.append(float(measured_bandwidth))
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+
+                    ## 2) EXECUTE OBW TEST UNDER EXTREME VOLTAGE AT MAXIMUM TEMP
+                    if not self.set_temperature_and_wait(temp_max):
+                        return
+
+                    # set voltage to min volt
+                    if not self.set_ex_voltage(volt_min):
+                        return
+                    
+                    self.fsv.reset()
+
+                    # execute test with appropriate filename
+                    filename = filename_obw[:-4] + "_maxtemp_minvolt" + ".jpg"
+                    measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
+
+                    bandwidths.append(float(measured_bandwidth))
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+
+                    # set voltage to max volt
+                    if not self.set_ex_voltage(volt_max):
+                        return
+                    
+                    self.fsv.reset()
+                    
+                    # execute test with appropriate filename
+                    filename = filename_obw[:-4] + "_maxtemp_maxvolt" + ".jpg"
+                    measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
+
+                    bandwidths.append(float(measured_bandwidth))
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+                    
+                    self.chamber.stop()
+                    sleep(2)
+
+                    self.set_ex_voltage(voltage)
+
+                    ## 3) EXECUTE OBW TEST UNDER EXTREME VOLTAGE AT MINIMUM TEMP
+                    if not self.set_temperature_and_wait(temp_min):
+                        return
+
+                    # set voltage to min volt
+                    if not self.set_ex_voltage(volt_min):
+                        return
+                    
+                    self.fsv.reset()
+
+                    # execute test with appropriate filename
+                    filename = filename_obw[:-4] + "_mintemp_minvolt" + ".jpg"
+                    measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
+
+                    bandwidths.append(float(measured_bandwidth))
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+
+                    # set voltage to max volt
+                    if not self.set_ex_voltage(volt_max):
+                        return
+                    
+                    self.fsv.reset()
+
+                    # execute test with appropriate filename
+                    filename = filename_obw[:-4] + "_mintemp_maxvolt" + ".jpg"
+                    measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
+
+                    bandwidths.append(float(measured_bandwidth))
+
+                    ## prepare results
+                    results = {
+                        'measure_ex': True,
+                        'obw': bandwidths,
+                        'obw_measured': True,
+                        'oob_measured': False
+                    }
+
+                # IF ONLY NORMAL CONDITIONS for obw test
+                else:
+                    measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+                    results = {
+                        'measure_ex': False,
+                        'obw': measured_bandwidth,
+                        'obw_measured': True,
+                        'oob_measured': False
+                    }
+
+            ### IF ONLY OOB TEST should be performed
             elif measure_oob:
-                oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
-                if self.stop_flag:
-                    self.cleanup()
-                    return
-                results = {
-                    'oc_pass': oc_pass,
-                    'ofb_pass': ofb_pass,
-                    'obw_measured': False,
-                    'oob_measured': True
-                }
+
+                # IF EXTREME CONDITIONS for oob test
+                if measure_ex:
+
+                    # prepare structures for results
+                    oc_passes = []
+                    ofb_passes = []
+
+                    ## 1) EXECUTE TEST UNDER NORMAL CONDITIONS
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+
+                    oc_passes.append(oc_pass)
+                    ofb_passes.append(ofb_pass)
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+
+                    ## 2) EXECUTE TEST UNDER EXTREME VOLTAGE AT MAXIMUM TEMP
+                    if not self.set_temperature_and_wait(temp_max):
+                        return
+
+                    # set voltage to min volt
+                    if not self.set_ex_voltage(volt_min):
+                        return
+                    
+                    self.fsv.reset()
+
+                    # execute test with appropriate filenames
+                    filename_oc = filename_oob_oc[:-4] + "_maxtemp_minvolt" + ".jpg"
+                    filename_ofb = filename_oob_ofb[:-4] + "_maxtemp_minvolt" + ".jpg"
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+
+                    oc_passes.append(oc_pass)
+                    ofb_passes.append(ofb_pass)
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+
+                    # set voltage to max volt
+                    if not self.set_ex_voltage(volt_max):
+                        return
+                    
+                    self.fsv.reset()
+                    
+                    # execute test with appropriate filenames
+                    filename_oc = filename_oob_oc[:-4] + "_maxtemp_maxvolt" + ".jpg"
+                    filename_ofb = filename_oob_ofb[:-4] + "_maxtemp_maxvolt" + ".jpg"
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+
+                    oc_passes.append(oc_pass)
+                    ofb_passes.append(ofb_pass)
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+                    
+                    self.chamber.stop()
+                    sleep(2)
+
+                    self.set_ex_voltage(voltage)
+
+                    ## 3) EXECUTE TEST UNDER EXTREME VOLTAGE AT MINIMUM TEMP
+                    if not self.set_temperature_and_wait(temp_min):
+                        return
+
+                    # set voltage to min volt
+                    if not self.set_ex_voltage(volt_min):
+                        return
+
+                    self.fsv.reset()
+
+                    # execute test with appropriate filenames
+                    filename_oc = filename_oob_oc[:-4] + "_mintemp_minvolt" + ".jpg"
+                    filename_ofb = filename_oob_ofb[:-4] + "_mintemp_minvolt" + ".jpg"
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+
+                    oc_passes.append(oc_pass)
+                    ofb_passes.append(ofb_pass)
+
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+
+                    # set voltage to max volt
+                    if not self.set_ex_voltage(volt_max):
+                        return
+                    
+                    self.fsv.reset()
+
+                    # execute test with appropriate filenames
+                    filename_oc = filename_oob_oc[:-4] + "_mintemp_maxvolt" + ".jpg"
+                    filename_ofb = filename_oob_ofb[:-4] + "_mintemp_maxvolt" + ".jpg"
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+
+                    oc_passes.append(oc_pass)
+                    ofb_passes.append(ofb_pass)
+
+                    ## prepare results
+                    results = {
+                        'measure_ex': True,
+                        'oc_passes': oc_passes,
+                        'ofb_passes': ofb_passes,
+                        'obw_measured': False,
+                        'oob_measured': True
+                    }
+
+                # IF ONLY NORMAL CONDITIONS for oob test
+                else:
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                    if self.stop_flag:
+                        self.cleanup()
+                        return
+                    results = {
+                        'measure_ex': False,
+                        'oc_pass': oc_pass,
+                        'ofb_pass': ofb_pass,
+                        'obw_measured': False,
+                        'oob_measured': True
+                    }
             
-            self.sps.set_amp_off()
+            # turn off equipment after test is complete
+            self.cleanup()
             
             if not self.stop_flag:
                 self.measurement_complete.emit(results)
 
         except Exception as e:
-            print(e)
+            tags.log('Background Thread', f'Exception {e}')
+            self.stop()
+            self.parent.show_warning('Error in background thread', 'Undefined error in background thread during measurement, check logs.')
+
+    def set_temperature_and_wait(self, temperature):
+        if not self.chamber.set_temperature(float(temperature)):
+            self.parent.show_warning('Error setting temperature', 'Check connection to WKL test chamber.')
+            tags.log('Background Thread WKL', 'Error setting temperature.')
+            self.cleanup()
+            return False
+        
+        for _ in range(1):  # 10 iterations for 10 minutes
+            sleep(60)
+            if self.stop_flag:
+                self.cleanup()
+                return False
+        return True
+    
+    def set_ex_voltage(self, voltage):
+        if not self.parent.apply_ex_voltage(voltage):
+            self.parent.show_warning('Error applying voltage', 'Check connection to power supply.')
+            tags.log('Background Thread SPS', 'Error applying voltage.')
+            self.cleanup()
+            return False
+        return True
 
     def stop(self):
         self.stop_flag = True
         self.sps.stop_operation()
         self.fsv.stop_operation()
+        self.cleanup()
+        self.chamber.stop()
 
     def cleanup(self):
         self.sps.set_amp_off()
         self.fsv.reset()
         self.sps.reset()
+        self.chamber.stop()
+        tags.log('Background Thread', 'Instruments turned off and/or reset to defaults.')
 
+# Class for main application with GUI definition and all relevant abstracted functions for interacting with equipment
 class OutOfBandMeasurementAutomation(QWidget):
+
     def __init__(self):
         super().__init__()
 
@@ -256,7 +510,8 @@ class OutOfBandMeasurementAutomation(QWidget):
                 temperature_min=-40,  # Minimum limit in temperature as per WKL manual
                 temperature_max=180,  # Maximum limit in temperature as per WKL manual
             )
-        except (socket.error, TypeError, ValueError, RuntimeError):
+            tags.log('main', f'Succesfully connected to instrument {self.chamber.idn}')
+        except:
             tags.log('main', 'Error initializing climate chamber.')
             
 
@@ -565,6 +820,9 @@ class OutOfBandMeasurementAutomation(QWidget):
             if not self.min_temp_input.text() or not self.max_temp_input.text() or not self.min_volt_input.text() or not self.max_volt_input.text():
                 self.show_warning('Input Error', 'Please enter the ranges for extreme conditions.')
                 return False
+            else:
+                if float(self.min_temp_input.text()) < self.chamber.temperature_min or float(self.max_temp_input.text()) > self.chamber.temperature_max:
+                    self.show_warning('Input Error', f'Temperature must be between {self.chamber.temperature_min} and {self.chamber.temperature_max} °C')
 
         return True
     
@@ -580,6 +838,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         if unit == 'GHz':
             return int(freq * 1000000000)
 
+    # execute selected measurements (connected to 'Start Automated Measurement' button)
     def execute_measurement(self):
 
         if self.validate_inputs():
@@ -596,17 +855,17 @@ class OutOfBandMeasurementAutomation(QWidget):
             # Extract project number
             project_nr = self.proj_input.text().replace(" ", "-").replace("/", "-")
 
-            # Centre frequency
+            # Extract centre frequency
             freq_unit = self.op_freq_input.unit_selector.currentText()
             centre_freq_raw = self.op_freq_input.input_field.text()
             centre_freq = self.convert_freq(float(centre_freq_raw), freq_unit)
 
-            # Span
+            # Extract span
             freq_unit = self.op_channel_width_input.unit_selector.currentText()
             ocw_raw = self.op_channel_width_input.input_field.text()
             ocw = self.convert_freq(float(ocw_raw), freq_unit)
 
-            ## Prepare inputs and execute measurements in asynchronous thread
+            ## Prepare inputs to execute measurements in asynchronous thread
             inputs = {
                 'path': self.selected_path_label.text(),
                 'filename_obw': f"{datetime.datetime.now().strftime('%Y-%m-%d_')}" + project_nr + "_" + "OccupiedBandwidth.jpg",
@@ -624,21 +883,25 @@ class OutOfBandMeasurementAutomation(QWidget):
                 'measure_ex': self.checkbox_ex.isChecked(),
             }
 
+            # Initialize new thread and start the measurement logic on that thread
             self.measurement_thread = MeasurementThread(self, self.fsv, self.sps, self.chamber, self.standard, inputs)
             self.measurement_thread.measurement_complete.connect(self.display_results)
             self.measurement_thread.start()
+            tags.log('main', 'Asynchronous thread initialized and measurement started.')
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
 
+    # stops currently ongoing measurement (connected to 'Interrupt Automated Measurement' button)
     def stop_measurement(self):
         if hasattr(self, 'measurement_thread'):
             tags.log('main', 'Stop measurement button clicked.')
             self.measurement_thread.stop()
             self.measurement_thread.wait()
             sleep(2)
-            self.status_bar.showMessage('Measurement interrupted.')
+            self.status_bar.showMessage('Measurement interrupted. Please restart program.')
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
+            self.show_warning('Measurement interrupted', 'Testing has been stopped and equipment turned off. Please restart program in order to properly continue any testing.')
     
     # function containing all GUI and instrument logic for occupied bandwidth measurement
     def execute_obw_measurement(self, ocw, centre_freq, path, filename_obw):
@@ -652,16 +915,20 @@ class OutOfBandMeasurementAutomation(QWidget):
 
     # function containing all GUI and instrurment logic for out-of-band emissions measurement
     def execute_oob_measurement(self, ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb):
+
+        # get test parameters as per definition in standard and then set them on spectrum analyzer
+        oob_parameters = self.standard.calc_oob_parameters(ocw)
+        self.fsv.prep_oob_parameters(centre_freq, oob_parameters)
+
+        # 1) OOB testing for operating channel
         self.status_bar.showMessage('Measuring out-of-band emissions for the operating channel...')
         tags.log('main', 'Starting OOB operating channel measurement.')
         QApplication.processEvents()
 
-        oob_parameters = self.standard.calc_oob_parameters(ocw)
-        self.fsv.prep_oob_parameters(centre_freq, oob_parameters)
-
         limit_points_oc = self.standard.calc_limit_oc(centre_freq, ocw)
         oc_pass = self.fsv.measure_oob_oc(limit_points_oc, filename_oob_oc, path)
-    
+
+        # 2) OOB testing for operational frequency band    
         self.status_bar.showMessage('Measuring out-of-band emissions for the operational frequency band...')
         tags.log('main', 'Starting OOB operational frequency band measurement.')
         QApplication.processEvents()
@@ -670,11 +937,6 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         limit_points_ofb = self.standard.calc_limit_ofb(f_low, f_high)
         ofb_pass = self.fsv.measure_oob_ofb(limit_points_ofb, filename_oob_ofb, path)
-
-        # cleanup display
-        if ofb_pass:
-            self.fsv.set_center_freq(centre_freq)
-            self.fsv.set_span(6*ocw)
 
         return oc_pass, ofb_pass
     
@@ -687,14 +949,18 @@ class OutOfBandMeasurementAutomation(QWidget):
             return
         
         if self.dc_radio.isChecked():
-            self.sps.set_voltage_dc(voltage)
+            result = self.sps.set_voltage_dc(voltage)
         else:
             ac_freq = self.frequency_input.text()
             if not ac_freq or int(ac_freq) > 100:
                 ac_freq = 50
                 self.frequency_input.setText('50')
 
-            self.sps.set_voltage_ac(voltage, ac_freq)
+            result = self.sps.set_voltage_ac(voltage, ac_freq)
+
+        # check if stop flag was set
+        if not result:
+            return
 
         ## TODO: check if voltage was succesfully applied 
         delay = 10
@@ -703,21 +969,18 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         sleep(delay)       # allow for EUT to boot and reach normal operating mode
 
+    # function for setting voltage in cases of min/max voltage extreme conditions
     def apply_ex_voltage(self, voltage):
         voltage = float(voltage)
-
-        if voltage > 270.0 or voltage <= 0.0:
-            QMessageBox.warning(self, 'Input Error', 'Please enter a valid voltage.')
-            return False
         
         if self.dc_radio.isChecked():
-            self.sps.set_voltage_dc(voltage)
+            result = self.sps.change_voltage_dc(voltage)
         else:
-            ac_freq = self.frequency_input.text()
-            if not ac_freq or int(ac_freq) > 100:
-                ac_freq = 50
+            result = self.sps.change_voltage_ac(voltage)
 
-            self.sps.set_voltage_ac(voltage, ac_freq)
+        # check if stop flag was set
+        if not result:
+            return False
 
         sleep(10)
 
@@ -726,6 +989,7 @@ class OutOfBandMeasurementAutomation(QWidget):
     # display results in bottom of GUI
     def display_results(self, results):
 
+        # stop timer and adjust GUI to reflect end of measurement
         self.timer.stop()
         elapsed_time = self.start_time.secsTo(QTime.currentTime())
         self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time} seconds')
@@ -733,6 +997,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
 
+        # get results values from background thread
         obw_measured = results.get('obw_measured', False)
         oob_measured = results.get('oob_measured', False)
         ex_measured = results.get('measure_ex', False)

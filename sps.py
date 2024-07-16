@@ -1,7 +1,7 @@
 """
 file: derived instrument class for Spitzenberger Spies "power supply"
 author: rueck.joshua@gmail.com
-last updated: 10/07/2024
+last updated: 16/07/2024
 """
 
 import instrument
@@ -87,10 +87,21 @@ class SPS(instrument.BaseInstrument):
                 self.disconnect()
                 tags.log('SPS', f'DC voltage set to {voltage}V')
 
+                return True
+
         except InterruptedError:
             self.disconnect()
             tags.log('SPS', 'Measurement interrupted.')
-            return None
+            return False
+        
+    def change_voltage_dc(self, voltage):
+        if self.connect():
+            self.instrument.write(f'OSC:AMP 1,{voltage}V')
+            sleep(1)
+            self.disconnect()
+            tags.log('SPS', f'DC voltage adjusted to {voltage} V')
+            return True
+        return False
 
     # set voltage AC
     def set_voltage_ac(self, voltage, freq):
@@ -119,10 +130,21 @@ class SPS(instrument.BaseInstrument):
                 self.disconnect()
                 tags.log('SPS', f'AC voltage set to {voltage}V at {freq}Hz')
 
+                return True
+
         except InterruptedError:
             self.disconnect()
             tags.log('SPS', 'Measurement interrupted.')
-            return None
+            return False
+        
+    def change_voltage_ac(self, voltage):
+        if self.connect():
+            self.instrument.write(f'OSC:AMP 1,{voltage}V')
+            sleep(1)
+            self.disconnect()
+            tags.log('SPS', f'AC voltage adjusted to {voltage} V')
+            return True
+        return False
 
     # helper function for range selection
     def determine_range(self, voltage):

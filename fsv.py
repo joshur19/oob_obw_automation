@@ -1,7 +1,7 @@
 """
 file: class for interfacing with R&S FSV signal analyzer
 author: rueck.joshua@gmail.com
-last updated: 10/07/2024
+last updated: 16/07/2024
 """
 
 import instrument
@@ -50,9 +50,9 @@ class FSV(instrument.BaseInstrument):
     def set_center_freq_connected(self, freq):
         if (freq > 0 and freq < 30000000000):
             self.instrument.write(f'SENS:FREQ:CENT {freq}')
-            tags.log('FSV', f'Center frequency set to {self.format_freq(freq)}')
+            return True
         else:
-            tags.log('FSV', 'Invalid frequency, not in range of FSV.')
+            return False
 
     # set span (also up to 30 GHz)
     def set_span(self, freq):
@@ -67,9 +67,9 @@ class FSV(instrument.BaseInstrument):
     def set_span_connected(self, freq):
         if (freq > 0 and freq < 30000000000):
             self.instrument.write(f'SENS:FREQ:SPAN {freq}')
-            tags.log('FSV', f'Span set to {self.format_freq(freq)}')
+            return True
         else:
-            tags.log('FSV', 'Invalid frequency, not in range of FSV.')
+            return False
 
     # adjust offset to reflect reference max e.r.p. as measured in SAC
     def adjust_erp(self, ref_value, centre_frequency, ocw, rbw):
@@ -131,7 +131,6 @@ class FSV(instrument.BaseInstrument):
 
     def set_rbw_connected(self, rbw):
         self.instrument.write(f'SENS:BAND:RES {rbw}')
-        tags.log('FSV', f'RBW set to {self.format_freq(rbw)}.')
 
     # set FSV video bandwidth
     def set_vbw_ratio(self, ratio):
@@ -142,7 +141,6 @@ class FSV(instrument.BaseInstrument):
 
     def set_vbw_ratio_connected(self, ratio):
         self.instrument.write(f'SENS:BAND:VID:RAT {ratio}')
-        tags.log('FSV', f'VBW set to {ratio}x RBW.')
 
     # set trace mode of specific trace
     def set_trace_mode(self, trace_nr, trace_mode):
@@ -163,7 +161,6 @@ class FSV(instrument.BaseInstrument):
 
         ### TODO: also check if trace number is valid
         self.instrument.write(f'DISP:TRAC{trace_nr}:MODE {trace_mode}')
-        tags.log('FSV', f'TRACE {trace_nr} set to mode {trace_mode}.')
 
     # set detector mode to specific values
     def set_det_mode(self, det_mode):
@@ -182,7 +179,6 @@ class FSV(instrument.BaseInstrument):
             raise ValueError(f'Invalid value for det_mode. Expected one of {valid_modes}, got {det_mode}')
         
         self.instrument.write(f'SENS:WIND:DET {det_mode}')
-        tags.log('FSV', f'Detector mode set to {det_mode}.')
 
     # show marker table true/false
     def show_mtable(self, visible):
@@ -244,7 +240,9 @@ class FSV(instrument.BaseInstrument):
     def measure_obw(self, filename, path, center_frequency, obw_parameters):
         try:
             if self.connect():
+
                 # prepare parameters
+                tags.log('FSV', 'Setting FSV parameters for OBW measurement.')
                 self.set_center_freq_connected(center_frequency)
                 sleep(0.5)
                 self.set_span_connected(obw_parameters['span'])
@@ -267,7 +265,7 @@ class FSV(instrument.BaseInstrument):
 
                 # perform automated measurement
                 self.instrument.write('CALC:MARK:FUNC:POW:SEL OBW')
-                sleep(4)
+                sleep(20)
                 self.check_stop()
                 obw = self.instrument.query('CALC:MARK:FUNC:POW:RES? OBW')
                 tags.log('FSV', f'OBW measurement executed: {self.format_freq(str.strip(obw))}')
@@ -365,8 +363,6 @@ class FSV(instrument.BaseInstrument):
 
                 self.instrument.write('DISP:MTAB ON')
 
-                tags.log('FSV', 'Markers added to out-of-band domain in operating channel measurement.')
-
                 sleep(2)
                 self.check_stop()
 
@@ -446,8 +442,6 @@ class FSV(instrument.BaseInstrument):
 
                 self.instrument.write('DISP:MTAB ON')
 
-                tags.log('FSV', 'Markers added to out-of-band domain in operational frequency band measurement.')
-
                 ofb_fail = self.instrument.query('CALC:LIM1:FAIL?')
 
                 self.check_stop()
@@ -517,11 +511,6 @@ class FSV(instrument.BaseInstrument):
                 self.check_stop()
                 self.take_screenshot_connected(filename.replace('center', 'right'), path)
                 sleep(5)
-
-                # cleanup
-                self.instrument.write('CALC:LIM1:DEL')
-                self.instrument.write('CALC:MARK:AOFF')
-                self.instrument.write('DISP:MTAB OFF')
 
                 # query limit check from device and then disconnect
                 self.disconnect()
