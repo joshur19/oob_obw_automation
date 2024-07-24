@@ -4,7 +4,7 @@
 ### Development (16.07.2024)
 
 - [x] Integrate climatic test chamber into test process
-- [ ] Actually pull the Voetschtechnik code and allow for exception handling if initialization fails (+ correct IDN display)
+- [x] Implement own WKL class based on Voetschtechnik GitHub code by Matias
 - [ ] Implement queries after relevant executed process in order to guarantee correct execution (SPS!)
 - [x] Add multithreading to prevent GUI from freezing up during measurement
 - [x] Add 'emergency stop' button to safely stop measurement in case of failure of some kind
