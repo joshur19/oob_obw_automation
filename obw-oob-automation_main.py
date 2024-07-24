@@ -13,7 +13,7 @@ import sps
 import wkl
 import tags
 import EN_300_220_1
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton)
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton, QTabWidget, QListWidget)
 from PyQt5.QtCore import Qt, QTime, QTimer, QLocale, QThread, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QFont
 
@@ -456,13 +456,15 @@ class MeasurementThread(QThread):
             self.parent.show_warning('Error in background thread', 'Undefined error in background thread during measurement, check logs.')
 
     def set_temperature_and_wait(self, temperature):
-        if not self.chamber.set_temperature(float(temperature)):
+        if not self.chamber.set_temp(float(temperature)):
             self.parent.show_warning('Error setting temperature', 'Check connection to WKL test chamber.')
             tags.log('Background Thread WKL', 'Error setting temperature.')
             self.cleanup()
             return False
         
-        for _ in range(1):  # 10 iterations for 10 minutes
+        self.chamber.start()
+        
+        for _ in range(10):  # 10 iterations for 10 minutes
             sleep(60)
             if self.stop_flag:
                 self.cleanup()
@@ -503,17 +505,11 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.sps.initialize()
         self.standard = EN_300_220_1.EN_300_220_1()
 
-        
         try:
-            self.chamber = wkl.WKL(
-                ip='172.16.102.1',  # IP address as per instrument interface
-                temperature_min=-40,  # Minimum limit in temperature as per WKL manual
-                temperature_max=180,  # Maximum limit in temperature as per WKL manual
-            )
+            self.chamber = wkl.WKL(tags.wkl_ip)
             tags.log('main', f'Succesfully connected to instrument {self.chamber.idn}')
         except:
-            tags.log('main', 'Error initializing climate chamber.')
-            
+            tags.log('main', 'Error initializing climate chamber.')         
 
         self.initUI()
     
@@ -539,7 +535,6 @@ class OutOfBandMeasurementAutomation(QWidget):
         project_layout.addWidget(self.proj_input)
         project_layout.addWidget(project_hint)
 
-        
         ### Manufacturer info group
         man_info_group = QGroupBox('Manufacturer Info')
         man_info_layout = QVBoxLayout()
@@ -581,6 +576,7 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         ac_freq_layout.addWidget(self.ac_radio)
         ac_freq_layout.addWidget(self.dc_radio)
+        ac_freq_layout.addStretch()
         ac_freq_layout.addWidget(self.frequency_label)
         ac_freq_layout.addWidget(self.frequency_input)
 
@@ -611,7 +607,6 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         man_info_group.setLayout(man_info_layout)
 
-        
         ### Test parameters group
         parameters_group = QGroupBox('Test Parameters')
         parameters_layout = QVBoxLayout()
@@ -688,7 +683,6 @@ class OutOfBandMeasurementAutomation(QWidget):
         parameters_layout.addLayout(select_path_layout)
         parameters_group.setLayout(parameters_layout)
 
-        
         ### Execute Measurement group
         exec_group = QGroupBox('Execute Measurement')
         exec_layout = QVBoxLayout()    
@@ -720,7 +714,6 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         exec_group.setLayout(exec_layout)
 
-        
         # Status bar
         self.status_bar = QStatusBar()
         
@@ -740,7 +733,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         results_layout.addWidget(self.screenshots_path_label)
         
         results_group.setLayout(results_layout)
-        
+
         # Add widgets to main layout
         main_layout.addLayout(project_layout)
         main_layout.addWidget(man_info_group)
@@ -748,7 +741,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         main_layout.addWidget(exec_group)
         main_layout.addWidget(self.status_bar)
         main_layout.addWidget(results_group)
-        
+
         self.setLayout(main_layout)
 
     # template for creation of frequency input incl. unit kHz/MHz/GHz
@@ -894,9 +887,10 @@ class OutOfBandMeasurementAutomation(QWidget):
     # stops currently ongoing measurement (connected to 'Interrupt Automated Measurement' button)
     def stop_measurement(self):
         if hasattr(self, 'measurement_thread'):
-            tags.log('main', 'Stop measurement button clicked.')
+            tags.log('main', 'Stop measurement button clicked. Please wait a moment while everything shuts down.')
             self.measurement_thread.stop()
             self.measurement_thread.wait()
+            self.timer.stop()
             sleep(2)
             self.status_bar.showMessage('Measurement interrupted. Please restart program.')
             self.start_button.setEnabled(True)

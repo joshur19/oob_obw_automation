@@ -9,6 +9,7 @@ import datetime
 sps_addr = 'GPIB0::6::INSTR' 
 ars_addr = 'GPIB0::3::INSTR'
 fsv_addr = 'TCPIP0::172.16.111.222::inst0::INSTR' 
+wkl_ip = "172.16.102.1"
 
 inputfield_width = 80
 
