@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QG
 from PyQt5.QtCore import Qt, QTime, QTimer, QLocale, QThread, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QFont
 
+WKL_TIME_TO_SET = 30 # in Minuten
+
 # Class handling the measurement operation in a background thread once the measurement button is clicked
 class MeasurementThread(QThread):
 
@@ -470,8 +472,9 @@ class MeasurementThread(QThread):
         
         self.chamber.start()
         
-        for _ in range(1):  # 10 iterations for 10 minutes
+        for _ in range(WKL_TIME_TO_SET):  # 30 iterations for 30 minutes
             sleep(60)
+            tags.log('Background Thread WKL', f'Chamber currently at {float(self.chamber.current_temp):.2f} ° C')
             if self.stop_flag:
                 self.cleanup()
                 return False
@@ -480,8 +483,9 @@ class MeasurementThread(QThread):
             return True
         else:
             tags.log('Background Thread WKL', 'Temperature not yet reached. Waiting another 5 minutes.')
-            for _ in range(5):  # 10 iterations for 10 minutes
+            for _ in range(5):  # 5 iterations for 5 minutes
                 sleep(60)
+                tags.log('Background Thread WKL', f'Chamber currently at {self.chamber.current_temp:.2f} °C')
                 if self.stop_flag:
                     self.cleanup()
                     return False
@@ -711,6 +715,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.checkbox_oob = QCheckBox('Execute Out-Of-Band Emissions Measurement')
         self.checkbox_ex = QCheckBox('Test under extreme conditions')
         self.checkbox_dm2 = QCheckBox('EUT generates test signal of type D-M2')
+        self.checkbox_fhss = QCheckBox('Device operates with FHSS')
         
         # Start measurement button
         bold_font = QFont()
@@ -728,6 +733,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         exec_layout.addWidget(self.checkbox_oob)
         exec_layout.addWidget(self.checkbox_ex)
         exec_layout.addWidget(self.checkbox_dm2)
+        exec_layout.addWidget(self.checkbox_fhss)
         exec_layout.addWidget(self.start_button)
         exec_layout.addWidget(self.stop_button)
 
@@ -976,7 +982,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         tags.log('main', 'Starting OOB operational frequency band measurement.')
         QApplication.processEvents()
 
-        f_low, f_high = self.determine_freq_range(centre_freq, fhss=False)  # TODO: FHSS true/false in der GUI abfragen
+        f_low, f_high = self.determine_freq_range(centre_freq, self.checkbox_fhss.isChecked())
 
         limit_points_ofb = self.standard.calc_limit_ofb(f_low, f_high)
         ofb_pass = self.fsv.measure_oob_ofb(limit_points_ofb, filename_oob_ofb, path)
