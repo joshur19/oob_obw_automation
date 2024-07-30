@@ -1,7 +1,7 @@
 """
 file: derived instrument class for Spitzenberger Spies "power supply"
 author: rueck.joshua@gmail.com
-last updated: 16/07/2024
+last updated: 30/07/2024
 """
 
 import instrument
@@ -19,6 +19,8 @@ class SPS(instrument.BaseInstrument):
         if self.connect('SPS'):
             self.instrument.write('DCL')   # reset SyCore to default settings
             sleep(2)
+            id = self.instrument.query('*IDN?')
+            tags.log('Instrument', f"Succesfully connected to instrument {id.strip()}")
             self.disconnect()
 
         try:
@@ -29,7 +31,7 @@ class SPS(instrument.BaseInstrument):
             ars.write('H_I_RANGE=8')        # configuration for ARS direct mode without harmonics/flicker
             sleep(1)
             ars.close()
-            tags.log('SPS', 'Succesfully connected to SPS and initialized ARS to direct mode.')
+            tags.log('SPS', 'Succesfully initialized ARS to direct mode.')
         except:
             tags.log('SPS', 'Initialization: Error initializing ARS to direct mode.')
 
@@ -156,3 +158,13 @@ class SPS(instrument.BaseInstrument):
             return 3
         else: 
             return 0
+        
+    def query_status(self):
+        if self.connect():
+            voltage = self.instrument.query('MEAS:VOLT?')
+            sleep(0.2)
+            amp_on = self.instrument.query('AMP:OUTPUT?')
+            sleep(0.2)
+            self.disconnect()
+            return voltage, amp_on
+        return False

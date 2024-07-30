@@ -1,7 +1,7 @@
 """
 file: class for interfacing with R&S FSV signal analyzer
 author: rueck.joshua@gmail.com
-last updated: 16/07/2024
+last updated: 30/07/2024
 """
 
 import instrument
@@ -17,10 +17,11 @@ class FSV(instrument.BaseInstrument):
         super().__init__(visa_address)
         self.stop_flag = False
         if self.connect('FSV'):
-            self.instrument.write('SYST:DISP:UPD ON')
+            self.instrument.write('SYST:DISP:UPD ON')   # turn on update of display during remote operation
             self.disconnect()
 
-    # set stop flag for interruption
+    ### INSTRUMENT HANDLING
+    # set stop flag for interruption of measurement
     def stop_operation(self):
         self.stop_flag = True
 
@@ -29,14 +30,15 @@ class FSV(instrument.BaseInstrument):
         if self.stop_flag:
             raise InterruptedError('Measurement was stopped.')
         
-    # reset
+    # reset instrument to default preset
     def reset(self):
         if self.connect():
             self.instrument.write('*RST')
             sleep(1)
             self.disconnect()
 
-    ### GENERAL PARAMETERS
+
+    ### SET GENERAL PARAMETERS
     # set center frequency within limits specified by manual (up to 30 GHz)
     def set_center_freq(self, freq):
         if (freq > 0 and freq < 30000000000):
@@ -148,7 +150,6 @@ class FSV(instrument.BaseInstrument):
         if trace_mode not in valid_modes:
             raise ValueError(f'Invalid value for trace_mode. Expected one of {valid_modes}, got {trace_mode}')
 
-        ### TODO: also check if trace number is valid
         if self.connect():
             self.instrument.write(f'DISP:TRAC{trace_nr}:MODE {trace_mode}')
             self.disconnect()
@@ -159,7 +160,6 @@ class FSV(instrument.BaseInstrument):
         if trace_mode not in valid_modes:
             raise ValueError(f'Invalid value for trace_mode. Expected one of {valid_modes}, got {trace_mode}')
 
-        ### TODO: also check if trace number is valid
         self.instrument.write(f'DISP:TRAC{trace_nr}:MODE {trace_mode}')
 
     # set detector mode to specific values
@@ -265,12 +265,12 @@ class FSV(instrument.BaseInstrument):
 
                 # perform automated measurement
                 self.instrument.write('CALC:MARK:FUNC:POW:SEL OBW')
-                sleep(20)
+                sleep(10)
                 self.check_stop()
                 obw = self.instrument.query('CALC:MARK:FUNC:POW:RES? OBW')
-                tags.log('FSV', f'OBW measurement executed: {self.format_freq(str.strip(obw))}')
+                tags.log('FSV', f'OBW measurement executed: {self.format_freq(str.strip(obw))}. Screenshot being saved.')
                 self.take_screenshot_connected(filename, path)
-                sleep(5)
+                sleep(3)
                 self.disconnect()
                 return obw
             else:
@@ -282,7 +282,7 @@ class FSV(instrument.BaseInstrument):
             return None
         
     # setup instrument for OOB measurement
-    def prep_oob_parameters(self, centre_freq, oob_parameters):
+    def prep_oob_parameters(self, centre_freq, oob_parameters, dm2):
         try:
             if self.connect():
                 # prepare parameters
@@ -293,8 +293,11 @@ class FSV(instrument.BaseInstrument):
                 self.set_rbw_connected(oob_parameters['rbw'])
                 sleep(0.5)
                 self.check_stop()
-                self.set_trace_mode_connected(1, 'maxhold')
-                sleep(0.5)
+                if dm2:
+                    self.set_trace_mode_connected(1, 'average')
+                else:
+                    self.set_trace_mode_connected(1, 'maxhold')
+                    sleep(0.5)
                 self.set_trace_mode_connected(2, 'write')
                 sleep(0.5)
                 self.set_det_mode_connected(oob_parameters['det_mode'])
@@ -305,11 +308,12 @@ class FSV(instrument.BaseInstrument):
             tags.log('FSV', 'Measurement interrupted.')
             return None
     
-        
     # measure out-of-band emissions for operating channel
     def measure_oob_oc(self, limit_points, filename, path):
         try:
             if self.connect():
+                tags.log('FSV', 'Calculating out-of-band emissions for operating channel.')
+
                 # clear lines and then define a new limit line
                 self.instrument.write('CALC:LIM1:DEL')
                 self.instrument.write('CALC:MARK:AOFF')
@@ -334,10 +338,8 @@ class FSV(instrument.BaseInstrument):
                 self.instrument.write('CALC:LIM1:UPP:STAT ON')
                 self.instrument.write('CALC:LIM1:STAT ON')
 
-                tags.log('FSV', 'Limit line for operating channel added.')
-
                 self.check_stop()
-                sleep(3)
+                sleep(1)
 
                 # deploy markers to peaks surrounding operating channel, three to either side of operating channel
                 left_oc_border = limit_points[1][0]
@@ -363,19 +365,17 @@ class FSV(instrument.BaseInstrument):
 
                 self.instrument.write('DISP:MTAB ON')
 
-                sleep(2)
+                sleep(1)
                 self.check_stop()
 
                 # query limit check and then take a screenshot
                 oc_fail = self.instrument.query('CALC:LIM1:FAIL?')
+                tags.log('FSV', f'Operating Channel OOB Test: {"PASS" if "0" in oc_fail else "FAIL"}. Screenshot being saved.')
                 self.take_screenshot_connected(filename, path)
-
-                sleep(5)
+                sleep(3)
 
                 # disconnect from device
                 self.disconnect()
-
-                tags.log('FSV', f'Operating Channel OOB Test: {"PASS" if "0" in oc_fail else "FAIL"}')
 
                 return '0' in oc_fail
             
@@ -388,6 +388,10 @@ class FSV(instrument.BaseInstrument):
     def measure_oob_ofb(self, limit_points, filename, path):
         try:
             if self.connect():
+                tags.log('FSV', 'Calculating out-of-band emissions for operational frequency band.')
+
+                # prep structure for limit checks
+                ofb_fail = []
 
                 # cleanup and then define a new limit line
                 self.instrument.write('CALC:LIM1:DEL')
@@ -413,10 +417,8 @@ class FSV(instrument.BaseInstrument):
                 self.instrument.write('CALC:LIM1:UPP:STAT ON')  # turns on limit line
                 self.instrument.write('CALC:LIM1:STAT ON')  # turns on limit check
 
-                tags.log('FSV', 'Limit line for operational frequency band added.')
-
                 self.check_stop()
-                sleep(3)
+                sleep(1)
 
                 # deploy markers to peaks surrounding operational frequency band, three to either side of frequency band
                 left_ofb_border = limit_points[2][0]
@@ -440,23 +442,24 @@ class FSV(instrument.BaseInstrument):
                     sleep(0.5)
                     self.check_stop()
 
+                # turn on marker table
                 self.instrument.write('DISP:MTAB ON')
 
-                ofb_fail = self.instrument.query('CALC:LIM1:FAIL?')
+                # limit check and save result for operational frequency band
+                tags.log('FSV', 'Measurement for central domain concluded. Screenshot being saved.')
+                ofb_fail.append(self.instrument.query('CALC:LIM1:FAIL?'))
 
+                sleep(1)
                 self.check_stop()
-                sleep(2)
-
                 self.take_screenshot_connected(filename, path)
-
                 self.check_stop()
-                sleep(5)
+                sleep(3)
 
                 # execute measurements for lower and upper edge cases with different RBW
                 # clear limit lines, set RBW and add threshold line according to standard
                 self.instrument.write('CALC:LIM1:DEL')
-                self.instrument.write('SENS:BAND:RES 10000')
                 self.instrument.write('CALC:MARK:AOFF')
+                self.instrument.write('SENS:BAND:RES 10000')
 
                 self.instrument.write('CALC:LIM1:NAME "LIMIT: -36dB"')
                 self.instrument.write('CALC:LIM1:COMM "Upper Limit OOB"')
@@ -464,17 +467,17 @@ class FSV(instrument.BaseInstrument):
                 self.instrument.write('CALC:LIM1:UNIT DBM')
 
                 self.check_stop()
+                sleep(1)
 
                 freq_cmd, dbm_cmd = self.create_limit_scpi_commands([(left_ofb_border-4000000, -36), (right_ofb_border+4000000, -36)])
                 self.instrument.write(freq_cmd)
                 self.instrument.write(dbm_cmd)
-
                 self.instrument.write('CALC:LIM1:UPP:STAT ON')  # turns on limit line
                 self.instrument.write('CALC:LIM1:STAT ON')  # turns on limit check
 
                 ### TODO: Centre frequency und span nach Standard anpassen (Table 17)
 
-                # move displayed spectrum to lower edge case and take a screenshot
+                # move displayed spectrum to lower edge case, add markers and take a screenshot
                 self.instrument.write(f'SENS:FREQ:STAR {left_ofb_border-4000000}')  # 4 MHz down from left border
                 self.instrument.write(f'SENS:FREQ:STOP {left_ofb_border}')
 
@@ -485,17 +488,18 @@ class FSV(instrument.BaseInstrument):
                     sleep(0.5)
                     self.check_stop()
 
-                tags.log('FSV', 'Measurement for lower spurious domain concluded.')
+                tags.log('FSV', 'Measurement for lower spurious domain concluded. Screenshot being saved.')
+                ofb_fail.append(self.instrument.query('CALC:LIM1:FAIL?'))
 
-                sleep(2)
+                sleep(1)
                 self.check_stop()
                 self.take_screenshot_connected(filename.replace('center', 'left'), path)
-                sleep(5)
+                self.check_stop()
+                sleep(3)
 
-                # move displayed spectrum to upper edge case and take a screenshot
+                # move displayed spectrum to upper edge case, add markers and take a screenshot
                 self.instrument.write(f'SENS:FREQ:STAR {right_ofb_border}')  # 4 MHz up from right border
                 self.instrument.write(f'SENS:FREQ:STOP {right_ofb_border+4000000}')
-
                 self.instrument.write('CALC:MARK:AOFF')
 
                 for nr in range(1, 4):
@@ -505,19 +509,24 @@ class FSV(instrument.BaseInstrument):
                     sleep(0.5)
                     self.check_stop()
 
-                tags.log('FSV', 'Measurement for upper spurious domain concluded.')
+                tags.log('FSV', 'Measurement for upper spurious domain concluded. Screenshot being saved.')
+                ofb_fail.append(self.instrument.query('CALC:LIM1:FAIL?'))
 
-                sleep(2)
+                sleep(1)
                 self.check_stop()
                 self.take_screenshot_connected(filename.replace('center', 'right'), path)
-                sleep(5)
+                self.check_stop()
+                sleep(3)
 
-                # query limit check from device and then disconnect
+                # disconnect from device
                 self.disconnect()
 
-                tags.log('FSV', f"Operational Frequency Band OOB Test: {'PASS' if '0' in ofb_fail else 'FAIL'}")
+                # check if any of the three limit checks was a fail
+                result_bool_fail = any(element != '0' for element in ofb_fail)
 
-                return '0' in ofb_fail
+                tags.log('FSV', f"Operational Frequency Band OOB Test: {'PASS' if not result_bool_fail else 'FAIL'}")
+
+                return not result_bool_fail
             
         except InterruptedError:
             self.disconnect()
@@ -542,7 +551,7 @@ class FSV(instrument.BaseInstrument):
         else:
             return f'{freq} Hz'
 
-    # create SCPI commands for populating limit line data points
+    # create SCPI commands for populating limit line data points in format expected by FSV
     def create_limit_scpi_commands(self, points):
         freq_points = ",".join(f"{freq} Hz" for freq, _ in points)
         scpi_freq_command = f"CALC:LIM1:CONT {freq_points}"

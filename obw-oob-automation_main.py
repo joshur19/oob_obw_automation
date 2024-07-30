@@ -1,7 +1,7 @@
 """
 file: main file for OBW and OOB measurement automation in the context of EN 300 220-1
 author: rueck.joshua@gmail.com
-last updated: 16/07/2024
+last updated: 30/07/2024
 """
 
 import sys
@@ -50,9 +50,14 @@ class MeasurementThread(QThread):
             measure_obw = self.inputs['measure_obw']
             measure_oob = self.inputs['measure_oob']
             measure_ex = self.inputs['measure_ex']
+            dm2 = False
             self.stop_flag = False
 
+            if self.parent.checkbox_dm2.isChecked():
+                dm2 = True
+
             # apply nominal voltage to EUT with SPS power supply
+            tags.log('Background Thread', 'Setting nominal voltage at EUT.')
             self.parent.apply_nom_voltage(voltage)
 
             if self.stop_flag:
@@ -72,7 +77,7 @@ class MeasurementThread(QThread):
 
                     ## 1) EXECUTE TESTS UNDER NORMAL CONDITIONS
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename_obw)
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb, dm2)
 
                     bandwidths.append(float(measured_bandwidth))
                     oc_passes.append(oc_pass)
@@ -98,7 +103,7 @@ class MeasurementThread(QThread):
 
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_minvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_maxtemp_minvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     bandwidths.append(float(measured_bandwidth))
                     oc_passes.append(oc_pass)
@@ -120,7 +125,7 @@ class MeasurementThread(QThread):
 
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_maxvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_maxtemp_maxvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     bandwidths.append(float(measured_bandwidth))
                     oc_passes.append(oc_pass)
@@ -151,7 +156,7 @@ class MeasurementThread(QThread):
 
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_minvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_mintemp_minvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     bandwidths.append(float(measured_bandwidth))
                     oc_passes.append(oc_pass)
@@ -173,7 +178,7 @@ class MeasurementThread(QThread):
 
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_maxvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_mintemp_maxvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     bandwidths.append(float(measured_bandwidth))
                     oc_passes.append(oc_pass)
@@ -195,7 +200,7 @@ class MeasurementThread(QThread):
                     if self.stop_flag:
                         self.cleanup()
                         return
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb, dm2)
                     if self.stop_flag:
                         self.cleanup()
                         return
@@ -331,7 +336,7 @@ class MeasurementThread(QThread):
                     ofb_passes = []
 
                     ## 1) EXECUTE TEST UNDER NORMAL CONDITIONS
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb, dm2)
 
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
@@ -353,7 +358,7 @@ class MeasurementThread(QThread):
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_minvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_maxtemp_minvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb), dm2
 
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
@@ -371,7 +376,7 @@ class MeasurementThread(QThread):
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_maxvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_maxtemp_maxvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
@@ -398,7 +403,7 @@ class MeasurementThread(QThread):
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_minvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_mintemp_minvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
@@ -416,7 +421,7 @@ class MeasurementThread(QThread):
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_maxvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_mintemp_maxvolt" + ".jpg"
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oc, filename_ofb, dm2)
 
                     oc_passes.append(oc_pass)
                     ofb_passes.append(ofb_pass)
@@ -432,7 +437,7 @@ class MeasurementThread(QThread):
 
                 # IF ONLY NORMAL CONDITIONS for oob test
                 else:
-                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb)
+                    oc_pass, ofb_pass = self.parent.execute_oob_measurement(ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb, dm2)
                     if self.stop_flag:
                         self.cleanup()
                         return
@@ -444,6 +449,8 @@ class MeasurementThread(QThread):
                         'oob_measured': True
                     }
             
+            tags.log('Background Thread', 'Measurement complete. Turning all instruments off. Await the results in the GUI.')
+
             # turn off equipment after test is complete
             self.cleanup()
             
@@ -457,19 +464,33 @@ class MeasurementThread(QThread):
 
     def set_temperature_and_wait(self, temperature):
         if not self.chamber.set_temp(float(temperature)):
-            self.parent.show_warning('Error setting temperature', 'Check connection to WKL test chamber.')
             tags.log('Background Thread WKL', 'Error setting temperature.')
             self.cleanup()
             return False
         
         self.chamber.start()
         
-        for _ in range(10):  # 10 iterations for 10 minutes
+        for _ in range(1):  # 10 iterations for 10 minutes
             sleep(60)
             if self.stop_flag:
                 self.cleanup()
                 return False
-        return True
+            
+        if float(temperature)-1 < self.chamber.current_temp < float(temperature)+1:
+            return True
+        else:
+            tags.log('Background Thread WKL', 'Temperature not yet reached. Waiting another 5 minutes.')
+            for _ in range(5):  # 10 iterations for 10 minutes
+                sleep(60)
+                if self.stop_flag:
+                    self.cleanup()
+                    return False
+            if float(temperature)-1 < self.chamber.current_temp < float(temperature)+1:
+                return True
+            else:
+                tags.log('Background Thread WKL', 'Temperature not reached. Error in setting temperature. Process being terminated.')
+                self.cleanup()
+                return False
     
     def set_ex_voltage(self, voltage):
         if not self.parent.apply_ex_voltage(voltage):
@@ -483,8 +504,6 @@ class MeasurementThread(QThread):
         self.stop_flag = True
         self.sps.stop_operation()
         self.fsv.stop_operation()
-        self.cleanup()
-        self.chamber.stop()
 
     def cleanup(self):
         self.sps.set_amp_off()
@@ -560,7 +579,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         nom_volt_layout.addWidget(volt_label)
 
         # Input for entering AC Frequency if necessary
-        self.acfreq_validator = QDoubleValidator(0.0, 1000, 2, notation=QDoubleValidator.StandardNotation)
+        self.acfreq_validator = QDoubleValidator(0.0, 100, 2, notation=QDoubleValidator.StandardNotation)
         self.acfreq_validator.setLocale(QLocale(QLocale.English))
 
         ac_freq_layout = QHBoxLayout()
@@ -583,7 +602,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.ac_radio.toggled.connect(self.toggle_frequency_input)
 
         # EUT-specific boot time
-        self.eut_boot_validator = QDoubleValidator(0.0, 3600, 1, notation=QDoubleValidator.StandardNotation)
+        self.eut_boot_validator = QDoubleValidator(0.0, 100, 1, notation=QDoubleValidator.StandardNotation)
         self.eut_boot_validator.setLocale(QLocale(QLocale.English))
 
         eut_boot_layout = QHBoxLayout()
@@ -793,22 +812,46 @@ class OutOfBandMeasurementAutomation(QWidget):
     # check inputs before starting measurement
     def validate_inputs(self):
 
+        # check if project number was input
         if not self.proj_input.text():
             self.show_warning('Input Error', 'Please enter the project number.')
             return False
-        if not self.op_freq_input.input_field.text():
+        
+        # check if operating frequency was input and if it is valid (<30 GHz)
+        if self.op_freq_input.input_field.text():
+            if self.op_freq_input.unit_selector.currentIndex() == 2:    # if unit selected is GHz
+                if float(self.op_freq_input.input_field.text()) > 30.0:
+                    self.show_warning('Input Error', 'Please enter a valid operating frequency. Maximum: 30 GHz')
+                    return False
+        else:
             self.show_warning('Input Error', 'Please enter the operating frequency.')
             return False
-        if not self.nom_volt_input.text():
-            self.show_warning('Input Error', 'Please enter the nominal operating voltage.')
-            return False
-        if not self.op_channel_width_input.input_field.text():
+        
+        # check if operating channel width was input and if it is valid (<30 GHz)
+        if self.op_channel_width_input.input_field.text():
+            if self.op_channel_width_input.unit_selector.currentIndex() == 2:    # if unit selected is GHz
+                if float(self.op_channel_width_input.input_field.text()) > 30.0:
+                    self.show_warning('Input Error', 'Please enter a valid operating channel width. Maximum: 30 GHz')
+                    return False
+        else:
             self.show_warning('Input Error', 'Please enter the operating channel width.')
             return False
-        if not self.selected_path_label.text():
-            self.show_warning('Input Error', 'Please select a path for saving screenshots.')
+        
+        # check if nominal voltage was input and if it is valid (<230 V)
+        if self.nom_volt_input.text():
+            if float(self.nom_volt_input.text()) > 230.0:
+                self.show_warning('Input Error', 'Please enter a valid nominal operating voltage. Maximum: 230 V')
+                return False
+        else:
+            self.show_warning('Input Error', 'Please enter the nominal operating voltage.')
             return False
 
+        # check if e.r.p reference value was input and if it is valid (-20 dBm < e.r.p reference < 14 dBm)
+        if self.erp_input.text():
+            if not -20 < float(self.erp_input.text()) < 14:
+                self.show_warning('Input Error', 'Please enter a valid e.r.p reference value between -20 and 14 dBm.')
+
+        # if testing under extreme conditions check temp and voltage inputs as well
         if self.checkbox_ex.isChecked():
             if not self.min_temp_input.text() or not self.max_temp_input.text() or not self.min_volt_input.text() or not self.max_volt_input.text():
                 self.show_warning('Input Error', 'Please enter the ranges for extreme conditions.')
@@ -816,6 +859,12 @@ class OutOfBandMeasurementAutomation(QWidget):
             else:
                 if float(self.min_temp_input.text()) < self.chamber.temperature_min or float(self.max_temp_input.text()) > self.chamber.temperature_max:
                     self.show_warning('Input Error', f'Temperature must be between {self.chamber.temperature_min} and {self.chamber.temperature_max} °C')
+                    return False
+
+        # check if path for screenshots has been selected
+        if not self.selected_path_label.text():
+            self.show_warning('Input Error', 'Please select a path for saving screenshots.')
+            return False
 
         return True
     
@@ -908,11 +957,11 @@ class OutOfBandMeasurementAutomation(QWidget):
         return self.fsv.measure_obw(filename_obw, path, centre_freq, obw_parameters)
 
     # function containing all GUI and instrurment logic for out-of-band emissions measurement
-    def execute_oob_measurement(self, ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb):
+    def execute_oob_measurement(self, ocw, centre_freq, path, filename_oob_oc, filename_oob_ofb, dm2):
 
         # get test parameters as per definition in standard and then set them on spectrum analyzer
         oob_parameters = self.standard.calc_oob_parameters(ocw)
-        self.fsv.prep_oob_parameters(centre_freq, oob_parameters)
+        self.fsv.prep_oob_parameters(centre_freq, oob_parameters, dm2)
 
         # 1) OOB testing for operating channel
         self.status_bar.showMessage('Measuring out-of-band emissions for the operating channel...')

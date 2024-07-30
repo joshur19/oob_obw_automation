@@ -4,10 +4,6 @@ author: rueck.joshua@gmail.com
 last updated: 02/07/2024
 """
 
-# idea: create a class "instrument" that respresents a general t&m instrument with all its basic functions
-# maybe implement classes that represent categories of devices like signal generator, signal analyzer, network analyzer, etc.
-# instantiate the common TÜV instruments with appropriate SCPI commands and then reference those objects in code depending on IDN query
-
 import pyvisa
 import tags
 
@@ -35,7 +31,7 @@ class BaseInstrument:
             self.instrument.write('*RST')
             self.disconnect()
         else:
-            tags.log('Instrument', f'Initialization: Unable to connect to instrument. {name}')
+            tags.log('Instrument', f'Initialization: Unable to connect to instrument {name}')
 
     def disconnect(self):
         self.instrument.close()

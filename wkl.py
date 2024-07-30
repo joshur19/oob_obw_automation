@@ -1,7 +1,7 @@
 """
 file: implementation of class for climatic test chamber based on work by Matias Senger on GitHub
 author: rueck.joshua@gmail.com
-last updated: 24/07/2024
+last updated: 30/07/2024
 """
 
 import socket
@@ -65,7 +65,7 @@ class WKL:
             cmd = cmd_settmp + f'{temp}'.encode('ascii') + b'\r'
             with self.communication_lock:
                 self.socket.send(cmd)
-            tags.log('WKL', 'Temperature set to {temp} °C.')
+            tags.log('WKL', f'Temperature set to {temp} °C.')
             return True
         else:
             raise ValueError("Temperature must be between -40 and 180 degrees Celsius.")
