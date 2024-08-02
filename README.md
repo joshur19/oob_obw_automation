@@ -1,7 +1,7 @@
 ## Automating Occupied Bandwidth and Out-Of-Band Emissions measurements in the context of ETSI EN 300 220-1
 
 ---
-### Development (30.07.2024)
+### Development (02.08.2024)
 
 - [x] Integrate climatic test chamber into test process
 - [x] Implement own WKL class based on Voetschtechnik GitHub code by Matias
@@ -11,7 +11,7 @@
 - [x] Implement custom time delay for EUT-specific boot time after power on
 - [x] Expand validate_inputs function to catch illogical user input
 - [ ] Detect if any connection interrupted during testing and stop measurement
-- [ ] Specific: implement the option for defining true/false for EUT FHSS operation
+- [x] Specific: implement the option for defining true/false for EUT FHSS operation
 - [ ] Implement dynamic instantiation of device objects via PyVISA resource manager at start of program
 - [ ] Optimize program timing
 

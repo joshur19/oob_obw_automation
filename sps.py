@@ -68,7 +68,7 @@ class SPS(instrument.BaseInstrument):
             if self.connect():
 
                 self.instrument.write('DCL')                        # reset instrument to default state
-                sleep(4)
+                sleep(2)
 
                 range = self.determine_range(voltage)
                 
@@ -76,7 +76,7 @@ class SPS(instrument.BaseInstrument):
                 self.check_stop()
                 sleep(3)
                 self.instrument.write('AMP:MODE:DC')                # set amplifier to DC mode
-                sleep(1)
+                sleep(0.5)
                 self.instrument.write('OSC:PAGE:FUNC 1,"DC"')       # set oscillator to DC mode (phase 1)
                 sleep(1)
                 self.instrument.write(f'OSC:AMP 1,{voltage}V')      # set oscillator amplitude to voltage (phase 1)
@@ -84,7 +84,7 @@ class SPS(instrument.BaseInstrument):
                 sleep(7)
                 self.check_stop()
                 self.instrument.write('AMP:OUTPUT 1')               # turn on amplifier output
-                sleep(1)
+                sleep(2)
                 
                 self.disconnect()
                 tags.log('SPS', f'DC voltage set to {voltage}V')
@@ -111,7 +111,7 @@ class SPS(instrument.BaseInstrument):
             if self.connect():
 
                 self.instrument.write('DCL')                        # reset instrument to default state
-                sleep(4)
+                sleep(2)
 
                 range = self.determine_range(voltage)
 
@@ -119,15 +119,15 @@ class SPS(instrument.BaseInstrument):
                 self.check_stop()
                 sleep(3)    
                 self.instrument.write('AMP:MODE:AC')                # set amplifier to DC mode
-                sleep(1)
+                sleep(0.5)
                 self.instrument.write(f'OSC:FREQ {freq}')           # set oscillator frequency
-                sleep(1)
+                sleep(0.5)
                 self.instrument.write(f'OSC:AMP 1,{voltage}V')      # set oscillator amplitude to voltage (phase 1)
                 self.check_stop()
                 sleep(7)
                 self.check_stop()
                 self.instrument.write('AMP:OUTPUT 1')               # turn on amplifier output
-                sleep(1)
+                sleep(2)
 
                 self.disconnect()
                 tags.log('SPS', f'AC voltage set to {voltage}V at {freq}Hz')

@@ -79,6 +79,8 @@ class FSV(instrument.BaseInstrument):
 
         ref_value = float(ref_value)
 
+        tags.log('FSV', 'Adjusting max. e.r.p to reflect conditions in SAC.')
+
         try:
 
             if self.connect():
@@ -101,7 +103,7 @@ class FSV(instrument.BaseInstrument):
 
                 if level < ref_value:
                     while level <= ref_value:
-                        offset = offset+0.5
+                        offset = offset+0.3
                         self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
                         sleep(3)
                         self.check_stop()
@@ -110,20 +112,70 @@ class FSV(instrument.BaseInstrument):
 
                 else:
                     while level >= ref_value:
-                        offset = offset-0.5
+                        offset = offset-0.3
                         self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
                         sleep(3)
                         self.check_stop()
                         self.instrument.write('CALC:MARK:MAX')
                         level = float(self.instrument.query('CALC:MARK:Y?'))
             
-            tags.log('FSV', f"Reference level offset set to {offset} dB, current peak: {level}")
+            tags.log('FSV', f"Reference level offset set to {offset} dB, measured max. e.r.p with this offset: {level:.2f} dBm")
+            self.disconnect()
 
         except InterruptedError:
             self.disconnect()
             tags.log('FSV', 'Measurement interrupted.')
             return None
     
+    # adjust offset to reflect reference max e.r.p. as measured in SAC
+    def adjust_erp_connected(self, ref_value, centre_frequency, ocw, rbw):
+        offset = 0
+
+        ref_value = float(ref_value)
+
+        try:
+
+            self.set_center_freq_connected(centre_frequency)
+            sleep(0.5)
+            self.set_span_connected(6*ocw)
+            sleep(0.5)
+            self.set_rbw_connected(rbw)
+            sleep(0.5)
+
+            self.check_stop()
+
+            self.instrument.write('CALC:MARK1:STAT ON')
+            self.instrument.write('DISP:TRAC:MODE MAXH')
+            sleep(3)
+            self.instrument.write('CALC:MARK:MAX')
+            level = float(self.instrument.query('CALC:MARK:Y?'))
+
+            self.check_stop()
+
+            if level < ref_value:
+                while level <= ref_value:
+                    offset = offset+0.5
+                    self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
+                    sleep(3)
+                    self.check_stop()
+                    self.instrument.write('CALC:MARK:MAX')
+                    level = float(self.instrument.query('CALC:MARK:Y?'))
+
+            else:
+                while level >= ref_value:
+                    offset = offset-0.5
+                    self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
+                    sleep(3)
+                    self.check_stop()
+                    self.instrument.write('CALC:MARK:MAX')
+                    level = float(self.instrument.query('CALC:MARK:Y?'))
+            
+            tags.log('FSV', f"Reference level offset set to {offset} dB, current peak: {level}")
+
+        except InterruptedError:
+            tags.log('FSV', 'Measurement interrupted.')
+            return None
+
     # set FSV resolution bandwidth
     def set_rbw(self, rbw):
         if self.connect():
@@ -393,6 +445,9 @@ class FSV(instrument.BaseInstrument):
                 # prep structure for limit checks
                 ofb_fail = []
 
+                # set span to adjust for limit lines
+                self.set_span_connected(limit_points[-1][0]-limit_points[0][0])
+
                 # cleanup and then define a new limit line
                 self.instrument.write('CALC:LIM1:DEL')
                 self.instrument.write('CALC:MARK:AOFF')
@@ -517,6 +572,10 @@ class FSV(instrument.BaseInstrument):
                 self.take_screenshot_connected(filename.replace('center', 'right'), path)
                 self.check_stop()
                 sleep(3)
+
+                # cleanup
+                self.instrument.write('CALC:LIM1:DEL')
+                self.instrument.write('CALC:MARK:AOFF')
 
                 # disconnect from device
                 self.disconnect()

@@ -52,15 +52,16 @@ class MeasurementThread(QThread):
             measure_obw = self.inputs['measure_obw']
             measure_oob = self.inputs['measure_oob']
             measure_ex = self.inputs['measure_ex']
+            adjust_erp = self.inputs['adjust_erp']
             dm2 = False
             self.stop_flag = False
 
             if self.parent.checkbox_dm2.isChecked():
                 dm2 = True
 
-            # apply nominal voltage to EUT with SPS power supply
-            tags.log('Background Thread', 'Setting nominal voltage at EUT.')
-            self.parent.apply_nom_voltage(voltage)
+            # ERP adjustment
+            if adjust_erp:
+                self.fsv.adjust_erp(adjust_erp, centre_freq, ocw, 1000)
 
             if self.stop_flag:
                 self.cleanup()
@@ -97,7 +98,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
 
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_maxtemp_minvolt" + ".jpg"
@@ -119,7 +120,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_max):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
                     
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_maxtemp_maxvolt" + ".jpg"
@@ -150,7 +151,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_mintemp_minvolt" + ".jpg"
@@ -172,7 +173,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_max):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
                     
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_mintemp_maxvolt" + ".jpg"
@@ -241,7 +242,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_maxtemp_minvolt" + ".jpg"
@@ -257,7 +258,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_max):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
                     
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_maxtemp_maxvolt" + ".jpg"
@@ -282,7 +283,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_mintemp_minvolt" + ".jpg"
@@ -298,7 +299,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_max):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_mintemp_maxvolt" + ".jpg"
@@ -355,7 +356,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_minvolt" + ".jpg"
@@ -373,7 +374,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_max):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
                     
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_maxvolt" + ".jpg"
@@ -400,7 +401,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
 
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_minvolt" + ".jpg"
@@ -418,7 +419,7 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_max):
                         return
                     
-                    self.fsv.reset()
+                    #self.fsv.reset()
 
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_maxvolt" + ".jpg"
@@ -471,15 +472,21 @@ class MeasurementThread(QThread):
             return False
         
         self.chamber.start()
+        self.parent.status_bar.showMessage(f'Chamber set to {temperature} °C and started.')
         
-        for _ in range(WKL_TIME_TO_SET):  # 30 iterations for 30 minutes
+        i = 0
+        for _ in range(WKL_TIME_TO_SET):  # 1 iteration = 1 minute
+            i = i+1
             sleep(60)
-            tags.log('Background Thread WKL', f'Chamber currently at {float(self.chamber.current_temp):.2f} ° C')
+            tags.log('Background Thread WKL', f'Chamber currently at {float(self.chamber.current_temp):.2f} °C. {i} out of {WKL_TIME_TO_SET} minutes elapsed.')
+            self.parent.status_bar.showMessage(f'Chamber running, {float(self.chamber.current_temp):.2f} / {temperature} °C, {i} / {WKL_TIME_TO_SET} mins elapsed')
             if self.stop_flag:
                 self.cleanup()
                 return False
             
         if float(temperature)-1 < self.chamber.current_temp < float(temperature)+1:
+            tags.log('Background Thread WKL', 'Temperature reached, starting with measurements.')
+            self.parent.status_bar.showMessage(f'Temperature reached, starting with measurements at {temperature} °C')
             return True
         else:
             tags.log('Background Thread WKL', 'Temperature not yet reached. Waiting another 5 minutes.')
@@ -513,7 +520,8 @@ class MeasurementThread(QThread):
         self.sps.set_amp_off()
         self.fsv.reset()
         self.sps.reset()
-        self.chamber.stop()
+        if self.chamber.is_running:
+            self.chamber.stop()
         tags.log('Background Thread', 'Instruments turned off and/or reset to defaults.')
 
 # Class for main application with GUI definition and all relevant abstracted functions for interacting with equipment
@@ -852,9 +860,9 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.show_warning('Input Error', 'Please enter the nominal operating voltage.')
             return False
 
-        # check if e.r.p reference value was input and if it is valid (-20 dBm < e.r.p reference < 14 dBm)
+        # check if e.r.p reference value was input and if it is valid (-35 dBm < e.r.p reference < 14 dBm)
         if self.erp_input.text():
-            if not -20 < float(self.erp_input.text()) < 14:
+            if not -35 < float(self.erp_input.text()) < 14:
                 self.show_warning('Input Error', 'Please enter a valid e.r.p reference value between -20 and 14 dBm.')
 
         # if testing under extreme conditions check temp and voltage inputs as well
@@ -872,7 +880,12 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.show_warning('Input Error', 'Please select a path for saving screenshots.')
             return False
 
-        return True
+        # make sure that at least one measurement is supposed to be executed (OBW/OOB)
+        if self.checkbox_obw.isChecked() or self.checkbox_oob.isChecked():
+            return True
+        else:
+            self.show_warning('Input Error', 'Please select at least one of both OBW/OOB measurements to be executed.')
+            return False
     
     def show_warning(self, title, msg):
         QMessageBox.warning(self, title, msg)
@@ -892,6 +905,24 @@ class OutOfBandMeasurementAutomation(QWidget):
         if self.validate_inputs():
             
             ## Preparation and extraction of relevant input from GUI
+            self.status_bar.showMessage('Setting EUT supply voltage. Please wait a moment.')
+            QApplication.processEvents()
+
+            self.start_button.setEnabled(False)
+            self.stop_button.setEnabled(True)
+
+            # Apply nominal voltage to EUT with SPS power supply
+            tags.log('main', 'Setting nominal voltage at EUT.')
+            self.apply_nom_voltage(self.nom_volt_input.text())
+
+            # Display window and pause execution to give user time to set up the EUT, re-commence operation of program once user clicks "continue"
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Setup EUT")
+            msg_box.setText("Once the EUT is ready for testing please press 'Ok' to proceed.")
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.addButton(QMessageBox.Ok)
+            msg_box.exec_()
+
             self.status_bar.showMessage('Measurement started...')
             QApplication.processEvents()
             
@@ -929,6 +960,7 @@ class OutOfBandMeasurementAutomation(QWidget):
                 'measure_obw': self.checkbox_obw.isChecked(),
                 'measure_oob': self.checkbox_oob.isChecked(),
                 'measure_ex': self.checkbox_ex.isChecked(),
+                'adjust_erp': self.erp_input.text()
             }
 
             # Initialize new thread and start the measurement logic on that thread
@@ -936,8 +968,6 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.measurement_thread.measurement_complete.connect(self.display_results)
             self.measurement_thread.start()
             tags.log('main', 'Asynchronous thread initialized and measurement started.')
-            self.start_button.setEnabled(False)
-            self.stop_button.setEnabled(True)
 
     # stops currently ongoing measurement (connected to 'Interrupt Automated Measurement' button)
     def stop_measurement(self):
@@ -986,6 +1016,7 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         limit_points_ofb = self.standard.calc_limit_ofb(f_low, f_high)
         ofb_pass = self.fsv.measure_oob_ofb(limit_points_ofb, filename_oob_ofb, path)
+        self.fsv.prep_oob_parameters(centre_freq, oob_parameters, dm2)
 
         return oc_pass, ofb_pass
     
@@ -1012,7 +1043,7 @@ class OutOfBandMeasurementAutomation(QWidget):
             return
 
         ## TODO: check if voltage was succesfully applied 
-        delay = 10
+        delay = 1
         if self.eut_boot_input.text():
             delay = float(self.eut_boot_input.text())
 
@@ -1041,8 +1072,8 @@ class OutOfBandMeasurementAutomation(QWidget):
         # stop timer and adjust GUI to reflect end of measurement
         self.timer.stop()
         elapsed_time = self.start_time.secsTo(QTime.currentTime())
-        self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time} seconds')
-        tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time}s')
+        self.status_bar.showMessage(f'Measurement complete. Total time: {elapsed_time // 3600}h{(elapsed_time % 3600) // 60}m{elapsed_time % 60}s')
+        tags.log('main', f'Automated measurement complete. Time elapsed: {elapsed_time // 3600}h{(elapsed_time % 3600) // 60}m{elapsed_time % 60}s ({elapsed_time} seconds)')
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
 
@@ -1085,7 +1116,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.screenshots_path_label.setText(f'Screenshots saved at: <a href="{self.selected_path_label.text()}">{self.selected_path_label.text()}</a>')
 
     # determine frequency range with given operating frequency. returns lower and upper limits
-    def determine_freq_range(self, freq, fhss: bool, filename="ERC-data/bands_03-2024.csv"):
+    def determine_freq_range(self, freq, fhss: bool = False, filename="ERC-data/bands_03-2024.csv"):
 
         if fhss:
             filename="ERC-data/bands_03-2024_FHSS.csv"
