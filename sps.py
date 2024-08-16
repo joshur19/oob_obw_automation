@@ -1,7 +1,7 @@
 """
-file: derived instrument class for Spitzenberger Spies "power supply"
+file: derived instrument class for Spitzenberger Spies "power supply system"
 author: rueck.joshua@gmail.com
-last updated: 30/07/2024
+last updated: 02/08/2024
 """
 
 import instrument
@@ -95,7 +95,8 @@ class SPS(instrument.BaseInstrument):
             self.disconnect()
             tags.log('SPS', 'Measurement interrupted.')
             return False
-        
+    
+    # change voltage DC without turning amp off
     def change_voltage_dc(self, voltage):
         if self.connect():
             self.instrument.write(f'OSC:AMP 1,{voltage}V')
@@ -138,7 +139,8 @@ class SPS(instrument.BaseInstrument):
             self.disconnect()
             tags.log('SPS', 'Measurement interrupted.')
             return False
-        
+
+    # change voltage AC without turning amp off  
     def change_voltage_ac(self, voltage):
         if self.connect():
             self.instrument.write(f'OSC:AMP 1,{voltage}V')

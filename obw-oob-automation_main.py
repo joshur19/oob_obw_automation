@@ -1,7 +1,7 @@
 """
 file: main file for OBW and OOB measurement automation in the context of EN 300 220-1
 author: rueck.joshua@gmail.com
-last updated: 30/07/2024
+last updated: 02/08/2024
 """
 
 import sys
@@ -13,7 +13,7 @@ import sps
 import wkl
 import tags
 import EN_300_220_1
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton, QTabWidget, QListWidget)
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton)
 from PyQt5.QtCore import Qt, QTime, QTimer, QLocale, QThread, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QFont
 
@@ -33,6 +33,7 @@ class MeasurementThread(QThread):
         self.standard = standard
         self.inputs = inputs            
 
+    # main function of MeasurementThread class containing the general logical structure of measurement
     def run(self):
         try:
             results = {}
@@ -98,8 +99,6 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
 
-                    #self.fsv.reset()
-
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_maxtemp_minvolt" + ".jpg"
                     measured_bandwidth = self.parent.execute_obw_measurement(ocw, centre_freq, path, filename)
@@ -119,8 +118,6 @@ class MeasurementThread(QThread):
                     # set voltage to max volt
                     if not self.set_ex_voltage(volt_max):
                         return
-                    
-                    #self.fsv.reset()
                     
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_maxtemp_maxvolt" + ".jpg"
@@ -150,8 +147,6 @@ class MeasurementThread(QThread):
                     # set voltage to min volt
                     if not self.set_ex_voltage(volt_min):
                         return
-                    
-                    #self.fsv.reset()
 
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_mintemp_minvolt" + ".jpg"
@@ -172,8 +167,6 @@ class MeasurementThread(QThread):
                     # set voltage to max volt
                     if not self.set_ex_voltage(volt_max):
                         return
-                    
-                    #self.fsv.reset()
                     
                     # execute both tests with appropriate filenames
                     filename = filename_obw[:-4] + "_mintemp_maxvolt" + ".jpg"
@@ -241,8 +234,6 @@ class MeasurementThread(QThread):
                     # set voltage to min volt
                     if not self.set_ex_voltage(volt_min):
                         return
-                    
-                    #self.fsv.reset()
 
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_maxtemp_minvolt" + ".jpg"
@@ -257,8 +248,6 @@ class MeasurementThread(QThread):
                     # set voltage to max volt
                     if not self.set_ex_voltage(volt_max):
                         return
-                    
-                    #self.fsv.reset()
                     
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_maxtemp_maxvolt" + ".jpg"
@@ -282,8 +271,6 @@ class MeasurementThread(QThread):
                     # set voltage to min volt
                     if not self.set_ex_voltage(volt_min):
                         return
-                    
-                    #self.fsv.reset()
 
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_mintemp_minvolt" + ".jpg"
@@ -298,8 +285,6 @@ class MeasurementThread(QThread):
                     # set voltage to max volt
                     if not self.set_ex_voltage(volt_max):
                         return
-                    
-                    #self.fsv.reset()
 
                     # execute test with appropriate filename
                     filename = filename_obw[:-4] + "_mintemp_maxvolt" + ".jpg"
@@ -355,8 +340,6 @@ class MeasurementThread(QThread):
                     # set voltage to min volt
                     if not self.set_ex_voltage(volt_min):
                         return
-                    
-                    #self.fsv.reset()
 
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_minvolt" + ".jpg"
@@ -373,8 +356,6 @@ class MeasurementThread(QThread):
                     # set voltage to max volt
                     if not self.set_ex_voltage(volt_max):
                         return
-                    
-                    #self.fsv.reset()
                     
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_maxtemp_maxvolt" + ".jpg"
@@ -401,8 +382,6 @@ class MeasurementThread(QThread):
                     if not self.set_ex_voltage(volt_min):
                         return
 
-                    #self.fsv.reset()
-
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_minvolt" + ".jpg"
                     filename_ofb = filename_oob_ofb[:-4] + "_mintemp_minvolt" + ".jpg"
@@ -418,8 +397,6 @@ class MeasurementThread(QThread):
                     # set voltage to max volt
                     if not self.set_ex_voltage(volt_max):
                         return
-                    
-                    #self.fsv.reset()
 
                     # execute test with appropriate filenames
                     filename_oc = filename_oob_oc[:-4] + "_mintemp_maxvolt" + ".jpg"
@@ -465,6 +442,7 @@ class MeasurementThread(QThread):
             self.stop()
             self.parent.show_warning('Error in background thread', 'Undefined error in background thread during measurement, check logs.')
 
+    # set the chamber to a certain temperature and wait for a specific amount of time defined by global variable. check if temperature is reached, if not wait 5 mins longer
     def set_temperature_and_wait(self, temperature):
         if not self.chamber.set_temp(float(temperature)):
             tags.log('Background Thread WKL', 'Error setting temperature.')
@@ -484,10 +462,12 @@ class MeasurementThread(QThread):
                 self.cleanup()
                 return False
             
+        # if temperature has been reached within 1 °C
         if float(temperature)-1 < self.chamber.current_temp < float(temperature)+1:
             tags.log('Background Thread WKL', 'Temperature reached, starting with measurements.')
             self.parent.status_bar.showMessage(f'Temperature reached, starting with measurements at {temperature} °C')
             return True
+        # if temperature has not been reached yet
         else:
             tags.log('Background Thread WKL', 'Temperature not yet reached. Waiting another 5 minutes.')
             for _ in range(5):  # 5 iterations for 5 minutes
@@ -523,6 +503,10 @@ class MeasurementThread(QThread):
         if self.chamber.is_running:
             self.chamber.stop()
         tags.log('Background Thread', 'Instruments turned off and/or reset to defaults.')
+
+
+
+
 
 # Class for main application with GUI definition and all relevant abstracted functions for interacting with equipment
 class OutOfBandMeasurementAutomation(QWidget):
@@ -887,6 +871,7 @@ class OutOfBandMeasurementAutomation(QWidget):
             self.show_warning('Input Error', 'Please select at least one of both OBW/OOB measurements to be executed.')
             return False
     
+    # display a message box warning
     def show_warning(self, title, msg):
         QMessageBox.warning(self, title, msg)
 
@@ -1042,7 +1027,6 @@ class OutOfBandMeasurementAutomation(QWidget):
         if not result:
             return
 
-        ## TODO: check if voltage was succesfully applied 
         delay = 1
         if self.eut_boot_input.text():
             delay = float(self.eut_boot_input.text())

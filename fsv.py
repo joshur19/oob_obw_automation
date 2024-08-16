@@ -1,7 +1,7 @@
 """
-file: class for interfacing with R&S FSV signal analyzer
+file: class for interfacing with R&S FSV spectrum analyzer
 author: rueck.joshua@gmail.com
-last updated: 30/07/2024
+last updated: 02/08/2024
 """
 
 import instrument
@@ -127,7 +127,6 @@ class FSV(instrument.BaseInstrument):
             tags.log('FSV', 'Measurement interrupted.')
             return None
     
-    # adjust offset to reflect reference max e.r.p. as measured in SAC
     def adjust_erp_connected(self, ref_value, centre_frequency, ocw, rbw):
         offset = 0
 
@@ -529,8 +528,6 @@ class FSV(instrument.BaseInstrument):
                 self.instrument.write(dbm_cmd)
                 self.instrument.write('CALC:LIM1:UPP:STAT ON')  # turns on limit line
                 self.instrument.write('CALC:LIM1:STAT ON')  # turns on limit check
-
-                ### TODO: Centre frequency und span nach Standard anpassen (Table 17)
 
                 # move displayed spectrum to lower edge case, add markers and take a screenshot
                 self.instrument.write(f'SENS:FREQ:STAR {left_ofb_border-4000000}')  # 4 MHz down from left border

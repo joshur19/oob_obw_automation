@@ -1,5 +1,5 @@
 """
-file: contains constants referenced in other parts of program, constant values and such
+file: contains constants referenced in other parts of program and logic for logging
 author: rueck.joshua@gmail.com
 last updated: 25/06/2024
 """
