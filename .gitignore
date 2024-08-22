@@ -1,2 +1,5 @@
 automation-env/
 __pycache__
+build/
+dist/
+obw-oob-automation_main.spec

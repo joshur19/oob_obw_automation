@@ -15,7 +15,8 @@ import tags
 import EN_300_220_1
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QFileDialog, QStatusBar, QMessageBox, QCheckBox, QRadioButton)
 from PyQt5.QtCore import Qt, QTime, QTimer, QLocale, QThread, pyqtSignal
-from PyQt5.QtGui import QDoubleValidator, QFont
+from PyQt5.QtGui import QDoubleValidator, QFont, QIcon
+import ctypes
 
 WKL_TIME_TO_SET = 30 # in Minuten
 
@@ -532,6 +533,7 @@ class OutOfBandMeasurementAutomation(QWidget):
     def initUI(self):
         self.setWindowTitle('EN 300 220-1 Test Automation')
         QApplication.setStyle('Fusion')
+        self.setWindowIcon(QIcon('robot.ico'))
         
         # Main layout
         main_layout = QVBoxLayout()
@@ -601,24 +603,11 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.eut_boot_validator = QDoubleValidator(0.0, 100, 1, notation=QDoubleValidator.StandardNotation)
         self.eut_boot_validator.setLocale(QLocale(QLocale.English))
 
-        eut_boot_layout = QHBoxLayout()
-        eut_boot_label = QLabel('(Optional) EUT boot time to intended operation mode:')
-        self.eut_boot_input = QLineEdit()
-        self.eut_boot_input.setValidator(self.eut_boot_validator)
-        self.eut_boot_input.setFixedWidth(tags.inputfield_width)
-        sec_label = QLabel('s')
-
-        eut_boot_layout.addWidget(eut_boot_label)
-        eut_boot_layout.addStretch()
-        eut_boot_layout.addWidget(self.eut_boot_input)
-        eut_boot_layout.addWidget(sec_label)
-
         # Finish up manufacturer info group
         man_info_layout.addWidget(self.op_freq_input)
         man_info_layout.addWidget(self.op_channel_width_input)
         man_info_layout.addLayout(nom_volt_layout)
         man_info_layout.addLayout(ac_freq_layout)
-        man_info_layout.addLayout(eut_boot_layout)
 
         man_info_group.setLayout(man_info_layout)
 
@@ -1027,12 +1016,6 @@ class OutOfBandMeasurementAutomation(QWidget):
         if not result:
             return
 
-        delay = 1
-        if self.eut_boot_input.text():
-            delay = float(self.eut_boot_input.text())
-
-        sleep(delay)       # allow for EUT to boot and reach normal operating mode
-
     # function for setting voltage in cases of min/max voltage extreme conditions
     def apply_ex_voltage(self, voltage):
         voltage = float(voltage)
@@ -1126,6 +1109,8 @@ class OutOfBandMeasurementAutomation(QWidget):
         return None
 
 def main():
+    myappid = 'tuevnord.srdautomation'
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     app = QApplication(sys.argv)
     window = OutOfBandMeasurementAutomation()
     window.show()
