@@ -79,7 +79,7 @@ class FSV(instrument.BaseInstrument):
 
         ref_value = float(ref_value)
 
-        tags.log('FSV', 'Adjusting max. e.r.p to reflect conditions in SAC.')
+        tags.log('FSV', 'Adjusting max. e.r.p to reflect conditions in SAC. Please wait a moment.')
 
         try:
 
@@ -95,28 +95,47 @@ class FSV(instrument.BaseInstrument):
 
                 self.instrument.write('CALC:MARK1:STAT ON')
                 self.instrument.write('DISP:TRAC:MODE MAXH')
-                sleep(3)
+                sleep(4)
                 self.instrument.write('CALC:MARK:MAX')
+                sleep(1)
                 level = float(self.instrument.query('CALC:MARK:Y?'))
 
                 self.check_stop()
 
                 if level < ref_value:
+                    offset = abs(ref_value - level) - 2
+                    self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
+                    sleep(4)
+                    self.check_stop()
+                    self.instrument.write('CALC:MARK:MAX')
+                    sleep(1)
+                    level = float(self.instrument.query('CALC:MARK:Y?'))
+
                     while level <= ref_value:
                         offset = offset+0.3
                         self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
                         sleep(3)
                         self.check_stop()
                         self.instrument.write('CALC:MARK:MAX')
+                        sleep(1)
                         level = float(self.instrument.query('CALC:MARK:Y?'))
 
                 else:
+                    offset = abs(level - ref_value) - 2
+                    self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
+                    sleep(4)
+                    self.check_stop()
+                    self.instrument.write('CALC:MARK:MAX')
+                    sleep(1)
+                    level = float(self.instrument.query('CALC:MARK:Y?'))
+
                     while level >= ref_value:
                         offset = offset-0.3
                         self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                        sleep(3)
+                        sleep(4)
                         self.check_stop()
                         self.instrument.write('CALC:MARK:MAX')
+                        sleep(1)
                         level = float(self.instrument.query('CALC:MARK:Y?'))
             
             tags.log('FSV', f"Reference level offset set to {offset} dB, measured max. e.r.p with this offset: {level:.2f} dBm")
