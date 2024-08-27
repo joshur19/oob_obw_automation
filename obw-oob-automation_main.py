@@ -1,7 +1,7 @@
 """
 file: main file for OBW and OOB measurement automation in the context of EN 300 220-1
 author: rueck.joshua@gmail.com
-last updated: 02/08/2024
+last updated: 27/08/2024
 """
 
 import sys
@@ -63,7 +63,7 @@ class MeasurementThread(QThread):
 
             # ERP adjustment
             if adjust_erp:
-                self.fsv.adjust_erp(adjust_erp, centre_freq, ocw, 1000)
+                self.fsv.adjust_erp(adjust_erp, centre_freq, ocw, 100000)   # 100 kHz RBW weil das wohl standardmäßig so eingestellt wird bei dieser Messung
 
             if self.stop_flag:
                 self.cleanup()
@@ -507,6 +507,17 @@ class MeasurementThread(QThread):
 
 
 
+class NoCommaLineEdit(QLineEdit):
+    def __init__(self, *args, **kwargs):
+        super(NoCommaLineEdit, self).__init__(*args, **kwargs)
+    
+    def keyPressEvent(self, event):
+        if event.text() == ',':
+            # Ignore the comma key press
+            event.ignore()
+        else:
+            # Process other key presses normally
+            super(NoCommaLineEdit, self).keyPressEvent(event)
 
 
 # Class for main application with GUI definition and all relevant abstracted functions for interacting with equipment
@@ -534,6 +545,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.setWindowTitle('EN 300 220-1 Test Automation')
         QApplication.setStyle('Fusion')
         self.setWindowIcon(QIcon('robot.ico'))
+        self.setMinimumSize(500, 730)
         
         # Main layout
         main_layout = QVBoxLayout()
@@ -566,7 +578,7 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         nom_volt_layout = QHBoxLayout()
         nom_volt_label = QLabel('Nominal Operating Voltage:')
-        self.nom_volt_input = QLineEdit()
+        self.nom_volt_input = NoCommaLineEdit()
         self.nom_volt_input.setValidator(self.volt_validator)
         self.nom_volt_input.setFixedWidth(tags.inputfield_width)
         volt_label = QLabel('V')
@@ -585,7 +597,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         self.dc_radio = QRadioButton('DC', self)
         self.dc_radio.setChecked(True)
         self.frequency_label = QLabel('Set AC Frequency (Hz):')
-        self.frequency_input = QLineEdit(self)
+        self.frequency_input = NoCommaLineEdit(self)
         self.frequency_input.setValidator(self.acfreq_validator)
         self.frequency_input.setFixedWidth(tags.inputfield_width)
         self.frequency_label.setEnabled(False)
@@ -621,7 +633,7 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         erp_layout = QHBoxLayout()
         erp_label = QLabel('(Optional) Maximum e.r.p as measured (SAC):')
-        self.erp_input = QLineEdit()
+        self.erp_input = NoCommaLineEdit()
         self.erp_input.setValidator(self.dbm_validator)
         self.erp_input.setFixedWidth(tags.inputfield_width)
         erp_hint = QLabel('dBm')
@@ -636,11 +648,11 @@ class OutOfBandMeasurementAutomation(QWidget):
 
         temp_layout = QHBoxLayout()
         temp_label = QLabel('Extreme Temperature Range:')
-        self.min_temp_input = QLineEdit()
+        self.min_temp_input = NoCommaLineEdit()
         self.min_temp_input.setValidator(self.temp_validator)
         self.min_temp_input.setPlaceholderText("Min Temp.")
         self.min_temp_input.setFixedWidth(tags.inputfield_width)
-        self.max_temp_input = QLineEdit()
+        self.max_temp_input = NoCommaLineEdit()
         self.max_temp_input.setValidator(self.temp_validator)
         self.max_temp_input.setPlaceholderText("Max Temp.")
         self.max_temp_input.setFixedWidth(tags.inputfield_width)
@@ -655,11 +667,11 @@ class OutOfBandMeasurementAutomation(QWidget):
         # Voltage range
         ex_volt_layout = QHBoxLayout()
         ex_volt_label = QLabel('Extreme Voltage Range:')
-        self.min_volt_input = QLineEdit()
+        self.min_volt_input = NoCommaLineEdit()
         self.min_volt_input.setValidator(self.volt_validator)
         self.min_volt_input.setPlaceholderText("Min Voltage")
         self.min_volt_input.setFixedWidth(tags.inputfield_width)
-        self.max_volt_input = QLineEdit()
+        self.max_volt_input = NoCommaLineEdit()
         self.max_volt_input.setValidator(self.volt_validator)
         self.max_volt_input.setPlaceholderText("Min Voltage")
         self.max_volt_input.setFixedWidth(tags.inputfield_width)
@@ -757,7 +769,7 @@ class OutOfBandMeasurementAutomation(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         label = QLabel(label_text)
-        input_field = QLineEdit()
+        input_field = NoCommaLineEdit()
         input_field.setFixedWidth(tags.inputfield_width)  # Fixed width for input fields
         unit_selector = QComboBox()
         unit_selector.addItems(['kHz', 'MHz', 'GHz'])

@@ -1,7 +1,7 @@
 """
 file: class for interfacing with R&S FSV spectrum analyzer
 author: rueck.joshua@gmail.com
-last updated: 02/08/2024
+last updated: 27/08/2024
 """
 
 import instrument
@@ -93,9 +93,9 @@ class FSV(instrument.BaseInstrument):
 
                 self.check_stop()
 
-                self.instrument.write('CALC:MARK1:STAT ON')
                 self.instrument.write('DISP:TRAC:MODE MAXH')
-                sleep(4)
+                sleep(5)
+                self.instrument.write('CALC:MARK1:STAT ON')
                 self.instrument.write('CALC:MARK:MAX')
                 sleep(1)
                 level = float(self.instrument.query('CALC:MARK:Y?'))
@@ -103,9 +103,9 @@ class FSV(instrument.BaseInstrument):
                 self.check_stop()
 
                 if level < ref_value:
-                    offset = abs(ref_value - level) - 2
+                    offset = abs(ref_value - level)
                     self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                    sleep(4)
+                    sleep(5)
                     self.check_stop()
                     self.instrument.write('CALC:MARK:MAX')
                     sleep(1)
@@ -114,16 +114,16 @@ class FSV(instrument.BaseInstrument):
                     while level <= ref_value:
                         offset = offset+0.3
                         self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                        sleep(3)
+                        sleep(5)
                         self.check_stop()
                         self.instrument.write('CALC:MARK:MAX')
                         sleep(1)
                         level = float(self.instrument.query('CALC:MARK:Y?'))
 
                 else:
-                    offset = abs(level - ref_value) - 2
+                    offset = abs(level - ref_value)
                     self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                    sleep(4)
+                    sleep(5)
                     self.check_stop()
                     self.instrument.write('CALC:MARK:MAX')
                     sleep(1)
@@ -132,13 +132,15 @@ class FSV(instrument.BaseInstrument):
                     while level >= ref_value:
                         offset = offset-0.3
                         self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                        sleep(4)
+                        sleep(5)
                         self.check_stop()
                         self.instrument.write('CALC:MARK:MAX')
                         sleep(1)
                         level = float(self.instrument.query('CALC:MARK:Y?'))
+
+                self.instrument.write(f'DISP:TRAC:Y:RLEV {offset}dBm')
             
-            tags.log('FSV', f"Reference level offset set to {offset} dB, measured max. e.r.p with this offset: {level:.2f} dBm")
+            tags.log('FSV', f"Reference level offset set to {offset:.2f} dB, measured max. e.r.p with this offset: {level:.2f} dBm")
             self.disconnect()
 
         except InterruptedError:
@@ -162,33 +164,54 @@ class FSV(instrument.BaseInstrument):
 
             self.check_stop()
 
-            self.instrument.write('CALC:MARK1:STAT ON')
             self.instrument.write('DISP:TRAC:MODE MAXH')
-            sleep(3)
+            sleep(5)
+            self.instrument.write('CALC:MARK1:STAT ON')
             self.instrument.write('CALC:MARK:MAX')
+            sleep(1)
             level = float(self.instrument.query('CALC:MARK:Y?'))
 
             self.check_stop()
 
             if level < ref_value:
+                offset = abs(ref_value - level)
+                self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
+                sleep(5)
+                self.check_stop()
+                self.instrument.write('CALC:MARK:MAX')
+                sleep(1)
+                level = float(self.instrument.query('CALC:MARK:Y?'))
+
                 while level <= ref_value:
-                    offset = offset+0.5
+                    offset = offset+0.3
                     self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                    sleep(3)
+                    sleep(5)
                     self.check_stop()
                     self.instrument.write('CALC:MARK:MAX')
+                    sleep(1)
                     level = float(self.instrument.query('CALC:MARK:Y?'))
 
             else:
+                offset = abs(level - ref_value)
+                self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
+                sleep(5)
+                self.check_stop()
+                self.instrument.write('CALC:MARK:MAX')
+                sleep(1)
+                level = float(self.instrument.query('CALC:MARK:Y?'))
+
                 while level >= ref_value:
-                    offset = offset-0.5
+                    offset = offset-0.3
                     self.instrument.write(f'DISP:TRAC:Y:RLEV:OFFS {offset}')
-                    sleep(3)
+                    sleep(5)
                     self.check_stop()
                     self.instrument.write('CALC:MARK:MAX')
+                    sleep(1)
                     level = float(self.instrument.query('CALC:MARK:Y?'))
-            
-            tags.log('FSV', f"Reference level offset set to {offset} dB, current peak: {level}")
+
+            self.instrument.write(f'DISP:TRAC:Y:RLEV {offset}dBm')
+        
+            tags.log('FSV', f"Reference level offset set to {offset:.2f} dB, measured max. e.r.p with this offset: {level:.2f} dBm")
 
         except InterruptedError:
             tags.log('FSV', 'Measurement interrupted.')
@@ -337,6 +360,7 @@ class FSV(instrument.BaseInstrument):
                 self.instrument.write('CALC:MARK:FUNC:POW:SEL OBW')
                 sleep(10)
                 self.check_stop()
+                self.instrument.write('CALC:MARK:MAX')
                 obw = self.instrument.query('CALC:MARK:FUNC:POW:RES? OBW')
                 tags.log('FSV', f'OBW measurement executed: {self.format_freq(str.strip(obw))}. Screenshot being saved.')
                 self.take_screenshot_connected(filename, path)
@@ -411,6 +435,10 @@ class FSV(instrument.BaseInstrument):
                 self.check_stop()
                 sleep(1)
 
+                # adjust span to display the total limit line in all cases
+                self.instrument.write(f'SENS:FREQ:STAR {limit_points[0][0]}')
+                self.instrument.write(f'SENS:FREQ:STOP {limit_points[5][0]}')
+
                 # deploy markers to peaks surrounding operating channel, three to either side of operating channel
                 left_oc_border = limit_points[1][0]
                 right_oc_border = limit_points[4][0]
@@ -484,6 +512,10 @@ class FSV(instrument.BaseInstrument):
 
                 self.check_stop()
                 sleep(1)
+
+                # set span to fit limit line
+                self.instrument.write(f'SENS:FREQ:STAR {limit_points[0][0]}')
+                self.instrument.write(f'SENS:FREQ:STOP {limit_points[7][0]}')
 
                 # adjust the offset in order to display limit line correctly and turn on the limit line
                 self.instrument.write('DISP:TRAC:Y:RLEV 20dBm')
